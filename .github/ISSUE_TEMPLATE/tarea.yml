@@ -1,0 +1,38 @@
+name: Tarea del curso
+description: Unidad de trabajo del proyecto Hospital API
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Completá el alcance y los criterios verificables.
+        Los títulos usan el prefijo `feat:`, `docs:` o `test:`.
+  - type: input
+    id: alcance
+    attributes:
+      label: Alcance
+      description: Qué se construye en esta tarea
+      placeholder: CRUD de pacientes con DTO y validación
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptación
+      description: Una condición verificable por línea
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: referencias
+    attributes:
+      label: Referencias
+      description: Secciones del README de la clase
+    validations:
+      required: false
+  - type: input
+    id: dependencias
+    attributes:
+      label: Depende de
+      description: Tareas que deben resolverse antes. Vacío si no aplica.
+    validations:
+      required: false
