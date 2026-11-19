@@ -37,7 +37,7 @@
    - [El modelo Patient](#54-el-modelo-patient)
    - [El modelo Doctor](#55-el-modelo-doctor)
    - [El modelo Nurse](#56-el-modelo-nurse)
-   - [El modelo Encounter](#57-el-modelo-encounter)
+   - [El modelo Appointment](#57-el-modelo-appointment)
    - [Asociaciones, foreign keys y onDelete](#58-asociaciones-foreign-keys-y-ondelete)
    - [El índice de modelos](#59-el-índice-de-modelos)
    - [Crear las tablas: sync](#510-crear-las-tablas-sync)
@@ -53,6 +53,7 @@
    - [Por qué /docs y /openapi.yaml](#73-por-qué-docs-y-openapiyaml)
 8. [Arquitectura](#8-arquitectura)
 9. [Tarea 014: MVP hospitalario documentado y probado](#9-tarea-014-mvp-hospitalario-documentado-y-probado)
+   - [Backlog de issues](docs/backlog.md)
    - [Objetivo](#91-objetivo)
    - [Entregables](#92-entregables)
    - [Estructura esperada](#93-estructura-esperada)
@@ -67,7 +68,7 @@
 ---
 
 > [!NOTE]
-> Esta clase no reescribe lo que ya hiciste: lo **extiende**. La API de usuarios de la Clase 7 sigue funcionando igual. Lo nuevo son cuatro recursos (pacientes, médicos, enfermeros y atenciones), un catálogo de especialidades y una tabla que relaciona pacientes con médicos, las tablas creadas desde el ORM, el contrato en OpenAPI, la documentación navegable en Swagger UI y dos capas de prueba: manual con Postman y automatizada en código.
+> Esta clase no reescribe lo que ya hiciste: lo **extiende**. La API de usuarios de la Clase 7 sigue funcionando igual. Lo nuevo son cuatro recursos (pacientes, médicos, enfermeros y turnos), un catálogo de especialidades, una tabla que vincula pacientes con médicos por fecha y hora, las tablas creadas desde el ORM, el contrato en OpenAPI, la documentación navegable en Swagger UI y dos capas de prueba: manual con Postman y automatizada en código.
 
 ## 1. Resumen y siguientes pasos
 
@@ -96,13 +97,13 @@ Por eso esta clase deja de ser un ejercicio de una tabla y pasa a ser el **MVP d
 
 | Pieza                 | Clase 7                                  | Clase 8                                                      |
 | --------------------- | ---------------------------------------- | ------------------------------------------------------------ |
-| Recursos              | `users`                                  | `patients`, `doctors`, `nurses`, `specialties` + `users`     |
+| Recursos              | `users`                                  | `patients`, `doctors`, `nurses`, `appointments`, `specialties` + `users` |
 | Tablas                | DDL escrito a mano en TablePlus          | Generadas por Sequelize (`sync`)                             |
-| Relaciones            | Ninguna: una tabla suelta                | `specialty_id` con `FOREIGN KEY` y asociaciones del ORM      |
+| Relaciones            | Ninguna: una tabla suelta                | Tres FK (`specialty_id`, `patient_id`, `doctor_id`) y un ENUM |
 | Contrato              | Lo que el código hacía                   | `docs/openapi.yaml` como fuente de verdad de la interfaz     |
 | Documentación         | README del repo                          | Swagger UI en `/docs` leyendo el contrato                    |
 | Pruebas               | `curl`                                   | Colección de Postman + tests automatizados                   |
-| Errores               | `VALIDATION_ERROR`, `EMAIL_TAKEN`, `404` | Los mismos, más `409` por documento/matrícula y `400` por FK |
+| Errores               | `VALIDATION_ERROR`, `EMAIL_TAKEN`, `404` | Los mismos, más `409` por duplicado, horario ocupado y recurso en uso |
 | Cantidad de endpoints | 7                                        | 33 (26 nuevos)                                               |
 
 > [!IMPORTANT]
@@ -131,9 +132,9 @@ El flujo que esta clase tiene que poder demostrar es este:
 2. Se registra un médico en una especialidad
 3. Se registra un paciente
 4. Se registra un enfermero
-5. Se registra una atención que vincula un paciente con un médico
-6. Se consultan, actualizan y eliminan los cuatro recursos
-7. Se buscan atenciones por paciente, por médico y por fecha
+5. Se agenda un turno que vincula un paciente con un médico, en una fecha y hora
+6. Se consultan, actualizan y cancelan los turnos
+7. Se buscan turnos por médico, por fecha y por paciente (documento o nombre)
 8. Todo queda en PostgreSQL y sobrevive a reiniciar el proceso
 9. Todo está descrito en /docs
 10. Todo está cubierto por pruebas
@@ -141,29 +142,30 @@ El flujo que esta clase tiene que poder demostrar es este:
 
 Si ese recorrido funciona completo, el MVP está cerrado. Todo lo demás es alcance posterior.
 
-| Recurso        | Operaciones                                                           | Estado  |
-| -------------- | --------------------------------------------------------------------- | ------- |
-| Pacientes      | crear, listar, buscar, actualizar, eliminar                           | Nuevo   |
-| Médicos        | crear, listar, buscar, actualizar, eliminar                           | Nuevo   |
-| Enfermeros     | crear, listar, buscar, actualizar, eliminar                           | Nuevo   |
-| Atenciones     | crear, listar, actualizar, eliminar, buscar por paciente/médico/fecha | Nuevo   |
-| Especialidades | listar (catálogo de solo lectura)                                     | Nuevo   |
-| Usuarios       | crear, listar, buscar, actualizar, eliminar                           | Clase 7 |
+| Recurso        | Operaciones                                                                  | Estado  |
+| -------------- | ---------------------------------------------------------------------------- | ------- |
+| Pacientes      | crear, listar, buscar, actualizar, eliminar                                  | Nuevo   |
+| Médicos        | crear, listar, buscar, actualizar, eliminar                                  | Nuevo   |
+| Enfermeros     | crear, listar, buscar, actualizar, eliminar                                  | Nuevo   |
+| Turnos         | crear, listar, actualizar, cancelar, eliminar, buscar por médico/fecha/paciente | Nuevo |
+| Especialidades | listar (catálogo de solo lectura)                                             | Nuevo   |
+| Usuarios       | crear, listar, buscar, actualizar, eliminar                                  | Clase 7 |
 
 **Qué queda afuera, y por qué**
 
-| Fuera del alcance          | Motivo                                                                                                      |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Login y autorización       | Requiere usuarios con credenciales; se ve más adelante en el curso                                          |
-| Turnos y agenda            | Un turno es lo **agendado**; una atención es lo que **ocurrió**. La agenda pide calendario y disponibilidad |
-| Historia clínica detallada | Diagnóstico, receta y evolución son datos sensibles: exigen auditoría, cifrado y retención                  |
-| Edición del catálogo       | Las especialidades se siembran; alcanza con leerlas en este MVP                                             |
+| Fuera del alcance          | Motivo                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Login y autorización       | Requiere usuarios con credenciales; se ve más adelante en el curso                                            |
+| Atención clínica           | Un turno es **administrativo**: dice cuándo y con quién, no qué pasó. Diagnóstico, receta y evolución son historia clínica |
+| Agenda avanzada            | Disponibilidad por franjas, lista de espera y reprogramación automática necesitan calendario y reglas propias  |
+| Recordatorios              | Notificaciones por mail o WhatsApp: integraciones y plantillas, fuera del MVP                                  |
+| Edición del catálogo       | Las especialidades se siembran; alcanza con leerlas en este MVP                                               |
 
 > [!WARNING]
 > Es un ejercicio educativo. Datos clínicos reales exigen normativa, auditoría, cifrado, privacidad, retención y controles que quedan fuera del alcance de la materia.
 
 > [!NOTE]
-> El catálogo de especialidades y la tabla de atenciones entran al MVP porque **sin relaciones reales no hay DER que explicar ni asociaciones que practicar**. La primera es 1:N; la segunda convierte el vínculo paciente–médico en una entidad con fecha y motivo propios.
+> El catálogo de especialidades y la tabla de turnos entran al MVP porque **sin relaciones reales no hay DER que explicar ni asociaciones que practicar**. La primera es 1:N; la segunda convierte el vínculo paciente–médico en una entidad con fecha, hora y estado propios.
 
 <sub>[⬆ Volver al índice](#contenido)</sub>
 
@@ -184,7 +186,7 @@ Seis tablas. Cinco se crean en esta clase; `users` ya existe.
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL`           | Auditoría mínima                         |
 | `updated_at` | `TIMESTAMPTZ` | `NOT NULL`           | Auditoría mínima                         |
 
-**`patients`** — la persona que recibe atención.
+**`patients`** — la persona que se atiende.
 
 | Campo                     | Tipo           | Restricción          | Por qué                                               |
 | ------------------------- | -------------- | -------------------- | ----------------------------------------------------- |
@@ -216,24 +218,32 @@ Seis tablas. Cinco se crean en esta clase; `users` ya existe.
 | `license_number`          | `VARCHAR(20)`  | `NOT NULL`, `UNIQUE` | Misma regla que el médico, en su propia tabla |
 | `created_at`/`updated_at` | `TIMESTAMPTZ`  | `NOT NULL`           | Auditoría                                     |
 
-**`encounters`** — la atención: qué paciente, qué médico, qué día y por qué.
+**`appointments`** — el turno: qué paciente, con qué médico, cuándo y en qué estado.
 
-| Campo                     | Tipo           | Restricción                    | Por qué                                |
-| ------------------------- | -------------- | ------------------------------ | -------------------------------------- |
-| `id`                      | `INTEGER`      | PK                             | Identidad                              |
-| `patient_id`              | `INTEGER`      | `NOT NULL`, FK → `patients.id` | Quién recibió la atención              |
-| `doctor_id`               | `INTEGER`      | `NOT NULL`, FK → `doctors.id`  | Quién la brindó                        |
-| `date`                    | `DATE`         | `NOT NULL`                     | Es la dimensión de búsqueda y de orden |
-| `reason`                  | `VARCHAR(255)` | `NOT NULL`                     | Sin motivo, la fila no explica nada    |
-| `created_at`/`updated_at` | `TIMESTAMPTZ`  | `NOT NULL`                     | Auditoría                              |
+| Campo                     | Tipo                | Restricción                    | Por qué                                        |
+| ------------------------- | ------------------- | ------------------------------ | ---------------------------------------------- |
+| `id`                      | `INTEGER`           | PK                             | Identidad                                      |
+| `patient_id`              | `INTEGER`           | `NOT NULL`, FK → `patients.id` | Quién se atiende                               |
+| `doctor_id`               | `INTEGER`           | `NOT NULL`, FK → `doctors.id`  | Con quién se atiende                           |
+| `scheduled_at`            | `TIMESTAMPTZ`       | `NOT NULL`                     | Fecha y hora del turno: se busca y se ordena por acá |
+| `duration_minutes`        | `INTEGER`           | `NOT NULL`, `DEFAULT 30`       | Dos turnos no duran lo mismo                   |
+| `reason`                  | `VARCHAR(255)`      | `NULL`                         | Motivo declarado al agendar; opcional          |
+| `status`                  | `appointment_status`| `NOT NULL`, `DEFAULT 'SCHEDULED'` | Agendado, cancelado, atendido o ausente     |
+| `cancelled_at`            | `TIMESTAMPTZ`       | `NULL`                         | Cuándo se canceló; lo setea el servidor        |
+| `created_at`/`updated_at` | `TIMESTAMPTZ`       | `NOT NULL`                     | Auditoría                                      |
 
-Un paciente puede tener muchas atenciones —con el mismo médico o con distintos—; un médico, muchas con distintos pacientes. Esa es la relación N:M que el documento base dejaba para después, resuelta con una **entidad que tiene atributos propios**: la fecha y el motivo pertenecen al vínculo, no a ninguna de las dos puntas.
+`appointment_status` es un ENUM nativo de PostgreSQL con cuatro valores: `SCHEDULED`, `CANCELLED`, `COMPLETED` y `NO_SHOW`.
+
+Un paciente puede tener muchos turnos —con el mismo médico o con distintos—; un médico tiene muchos turnos con distintos pacientes. Esa es la relación N:M que el documento base dejaba para después, resuelta con una **entidad que tiene atributos propios**: la fecha, la duración y el estado pertenecen al turno, no a ninguna de las dos puntas.
+
+> [!IMPORTANT]
+> `UNIQUE (doctor_id, scheduled_at)` es la restricción mínima de una agenda: el mismo médico no puede tener dos turnos a la misma hora exacta. No alcanza para detectar solapamientos (un turno de 30 minutos a las 14:00 choca con uno de las 14:15), y eso se resuelve en la capa de negocio, no con un `UNIQUE`. La limitación está a la vista y se explica, en lugar de fingir que la base resuelve todo.
 
 **`users`** — ya existe desde la Clase 7. `id`, `name`, `email` (`UNIQUE`), `password VARCHAR(255) NOT NULL` (guarda el hash, nunca el texto plano), `role user_role NOT NULL DEFAULT 'ROLE_USER'` y los timestamps. `user_role` es un ENUM nativo de PostgreSQL con dos valores: `ROLE_USER` y `ROLE_ADMIN`.
 
 ### 3.2 Decisiones de diseño
 
-Cinco decisiones que conviene poder defender en voz alta.
+Seis decisiones que conviene poder defender en voz alta.
 
 **1. `specialty` deja de ser un texto y pasa a ser una tabla.**
 
@@ -254,26 +264,30 @@ Un documento de identidad es un **identificador**, no un número con el que se o
 
 Nadie nace "a las 14:03 UTC". `DATEONLY` en Sequelize produce una columna `DATE` en PostgreSQL y devuelve `"1985-12-10"` como string: sin hora, sin zona horaria y sin el clásico bug de "cumpleaños que se corre un día" al serializar. El contrato viaja en ISO 8601 (`YYYY-MM-DD`).
 
-**4. Enfermeros no tiene especialidad ni atenciones (todavía).**
+**4. Enfermeros no tiene especialidad ni turnos (todavía).**
 
-`nurses` queda sin FK a propósito. Podría tener un área, pero **no la pide nadie en este MVP** y agregar una tabla que ningún endpoint usa es deuda, no diseño. Tampoco participa de `encounters`: las atenciones de este MVP son paciente ↔ médico. Cuando enfermería entre al dominio, aparecerá otra relación —y ese día se decide con el dominio, no por simetría—. Modelar de menos y decirlo es más profesional que modelar de más y no poder justificarlo.
+`nurses` queda sin FK a propósito. Podría tener un área, pero **no la pide nadie en este MVP** y agregar una tabla que ningún endpoint usa es deuda, no diseño. Tampoco participa de `appointments`: los turnos de este MVP son paciente ↔ médico. Cuando enfermería entre al dominio, aparecerá otra relación —y ese día se decide con el dominio, no por simetría—. Modelar de menos y decirlo es más profesional que modelar de más y no poder justificarlo.
 
-**5. La atención es una entidad, no una tabla pivote.**
+**5. El turno es una entidad con estado, no una tabla pivote.**
 
-Una tabla pivote solo guarda dos claves foráneas. `encounters` guarda además **fecha y motivo**, y esos datos pertenecen al vínculo, no al paciente ni al médico. Eso cambia el código, no solo el diagrama:
+Una tabla pivote solo guarda dos claves foráneas. `appointments` guarda además **fecha y hora, duración y estado**, y esos datos pertenecen al turno, no al paciente ni al médico. Eso cambia el código, no solo el diagrama:
 
-| Si fuera pivote                           | Siendo entidad                                             |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `belongsToMany` con `through`             | Dos `belongsTo` y dos `hasMany`, con modelo propio         |
-| No tendría ruta ni contrato propio        | Tiene CRUD, DTO, validación y endpoints propios            |
-| Se borra con cualquiera de las dos puntas | `ON DELETE RESTRICT` en ambas FK: la atención no se pierde |
-| No se puede buscar por fecha              | `date` es columna de primera clase y se indexa             |
+| Si fuera pivote                           | Siendo entidad                                                  |
+| ----------------------------------------- | --------------------------------------------------------------- |
+| `belongsToMany` con `through`             | Dos `belongsTo` y dos `hasMany`, con modelo propio              |
+| No tendría ruta ni contrato propio        | Tiene CRUD, DTO, validación y endpoints propios                 |
+| Se borra con cualquiera de las dos puntas | `ON DELETE RESTRICT`: el turno no desaparece con el paciente    |
+| No se puede buscar por fecha ni por estado | `scheduled_at` y `status` son columnas de primera clase, indexadas |
+
+**6. Cancelar no es borrar.**
+
+Un turno cancelado sigue siendo información: dice que hubo una reserva, para qué fecha y cuándo se dio de baja. Si lo borrás, perdés el registro y no podés responder "¿cuántos turnos se cancelaron este mes?". Por eso existen `status` y `cancelled_at`, y `DELETE` queda para corregir un turno cargado por error. Esa regla es del dominio, no del ORM.
 
 > [!IMPORTANT]
-> `date` es `DATE`, no `TIMESTAMP`. Una atención ocurrió **un día**; la hora exacta no la pide ningún caso de este MVP y agregarla obliga a decidir zona horaria. Si mañana la agenda necesita horarios, se agrega una columna nueva con su migración, no se reinterpreta la existente.
+> `scheduled_at` es `TIMESTAMPTZ`, no `DATE`. Un turno tiene hora, y esa hora ocurre en un instante concreto. La consecuencia práctica: **no se busca con `=`**. `WHERE scheduled_at = '2026-11-20'` no devuelve nada, porque compara un instante contra un día. Se busca por rango: desde las 00:00 hasta las 00:00 del día siguiente.
 
 > [!NOTE]
-> `RESTRICT` en las dos FK de `encounters` significa algo concreto para el usuario de la API: `DELETE /api/patients/{id}` y `DELETE /api/doctors/{id}` responden `409` cuando esa persona tiene atenciones registradas. No es un bug: es la base negándose a borrar historia clínica.
+> `RESTRICT` en las dos FK significa algo concreto para el usuario de la API: `DELETE /api/patients/{id}` y `DELETE /api/doctors/{id}` responden `409` cuando esa persona tiene turnos. No es un bug: es la base negándose a dejar turnos huérfanos. Si querés borrar al paciente, primero decidís qué pasa con sus turnos.
 
 > [!IMPORTANT]
 > Cada `UNIQUE` es una regla de negocio escrita una sola vez, en el lugar donde nadie la puede saltear. Si la unicidad vive solo en un `if` del controller, dos peticiones simultáneas pueden pasar las dos.
@@ -330,19 +344,22 @@ erDiagram
         timestamptz updated_at
     }
 
-    ENCOUNTERS {
+    APPOINTMENTS {
         int id PK
         int patient_id FK
         int doctor_id FK
-        date date
-        varchar reason
+        timestamptz scheduled_at
+        int duration_minutes "DEFAULT 30"
+        varchar reason "NULL"
+        appointment_status status "DEFAULT SCHEDULED"
+        timestamptz cancelled_at "NULL"
         timestamptz created_at
         timestamptz updated_at
     }
 
     SPECIALTIES ||--o{ DOCTORS : "has"
-    PATIENTS ||--o{ ENCOUNTERS : "receives"
-    DOCTORS ||--o{ ENCOUNTERS : "attends"
+    PATIENTS ||--o{ APPOINTMENTS : "books"
+    DOCTORS ||--o{ APPOINTMENTS : "attends"
 ```
 
 **Cómo leerlo**
@@ -359,9 +376,9 @@ erDiagram
 | Relación                  | Cardinalidad | Regla                                                                                                      |
 | ------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------- |
 | `specialties` → `doctors` | 1 : N        | Una especialidad agrupa muchos médicos; un médico pertenece a una                                          |
-| `patients` → `encounters` | 1 : N        | Un paciente tiene cero o muchas atenciones; cada atención tiene un paciente                                |
-| `doctors` → `encounters`  | 1 : N        | Un médico tiene cero o muchas atenciones; cada atención tiene un médico                                    |
-| `patients` ↔ `doctors`    | N : M        | **A través de `encounters`.** No es una relación directa: siempre pasa por una atención con fecha y motivo |
+| `patients` → `appointments` | 1 : N      | Un paciente agenda cero o muchos turnos; cada turno es de un paciente                                       |
+| `doctors` → `appointments`  | 1 : N      | Un médico atiende cero o muchos turnos; cada turno es de un médico                                          |
+| `patients` ↔ `doctors`    | N : M        | **A través de `appointments`.** No es una relación directa: siempre pasa por un turno con fecha, hora y estado |
 | `nurses` ↔ todo           | —            | Independiente en este MVP                                                                                  |
 | `users` ↔ todo            | —            | Independiente. El rol existe, pero la autorización real todavía no: en la Clase 7 se simuló con un header  |
 
@@ -372,7 +389,7 @@ erDiagram
 > `password` **no** se documenta en OpenAPI ni se devuelve en ninguna respuesta. Documentar el modelo crudo es la forma más rápida de filtrar un hash: el schema `User` del contrato se escribe a mano, con `id`, `name`, `email` y `role` —nunca con `password`.
 
 > [!TIP]
-> `ON DELETE` es parte del modelo, no un detalle del ORM. Con `RESTRICT`, borrar una especialidad que tiene médicos **falla**, y eso es correcto: el motor te está avisando que dejarías datos huérfanos. En `encounters` la misma regla protege algo más valioso: no se borra un paciente ni un médico que tenga atenciones registradas. Con `CASCADE` borrarías historia clínica sin que nadie lo pidiera.
+> `ON DELETE` es parte del modelo, no un detalle del ORM. Con `RESTRICT`, borrar una especialidad que tiene médicos **falla**, y eso es correcto: el motor te está avisando que dejarías datos huérfanos. En `appointments` la misma regla protege algo más valioso: no se borra un paciente ni un médico que tenga turnos agendados. Con `CASCADE` borrarías turnos —y con ellos el registro de las cancelaciones— sin que nadie lo pidiera.
 
 ### 3.4 Del DER a Sequelize
 
@@ -386,10 +403,13 @@ El diagrama se escribe una vez y se traduce a código una vez. Esta es la corres
 | `varchar(120)`        | `DataTypes.STRING(120)`                                                | `VARCHAR(120)`                                 |
 | `date`                | `DataTypes.DATEONLY`                                                   | `DATE`                                         |
 | `timestamptz`         | `timestamps: true` (automático)                                        | `created_at`, `updated_at`                     |
+| `timestamptz` de negocio | `DataTypes.DATE`                                                    | `TIMESTAMPTZ`                                  |
+| ENUM nativo           | `type: "appointment_status"` + `validate.isIn`                         | `CREATE TYPE appointment_status AS ENUM (...)` |
+| `UNIQUE (a, b)`       | `indexes: [{ unique: true, fields: ["a", "b"] }]`                      | `UNIQUE (a, b)`                                |
 | `UK`                  | `unique: true`                                                         | `UNIQUE` (índice único)                        |
 | `FK specialty_id`     | `Doctor.belongsTo(Specialty, { foreignKey: "specialtyId" })`           | `FOREIGN KEY ... REFERENCES`                   |
 | `1 : N`               | `hasMany` en un lado, `belongsTo` en el otro                           | La FK vive en el lado "muchos"                 |
-| `N : M` con atributos | Un modelo propio (`Encounter`) con dos `belongsTo`, no `belongsToMany` | Tabla intermedia con dos FK y columnas propias |
+| `N : M` con atributos | Un modelo propio (`Appointment`) con dos `belongsTo`, no `belongsToMany` | Tabla intermedia con dos FK y columnas propias |
 
 > [!NOTE]
 > `hasMany` **no** crea nada por sí solo: declara la relación en el ORM para que puedas hacer `include` y para que `sync` sepa en qué orden crear las tablas y dónde poner la FK. La columna existe porque `belongsTo` la declara.
@@ -418,71 +438,93 @@ GET    /api/specialties
 GET    /api/specialties/{id}
 ```
 
-Las atenciones tienen CRUD completo, pero la búsqueda no es por palabra clave: es por **paciente, médico o fecha**, con filtros combinables.
+Los turnos tienen CRUD completo, pero la búsqueda no es por palabra clave: es por **médico, fecha y paciente**, con filtros combinables.
 
 ```http
-GET    /api/encounters
-GET    /api/encounters/search?patientId=1
-GET    /api/encounters/search?doctorId=2
-GET    /api/encounters/search?date=2026-11-20
-GET    /api/encounters/search?patientId=1&date=2026-11-20
-GET    /api/encounters/{id}
-POST   /api/encounters
-PATCH  /api/encounters/{id}
-DELETE /api/encounters/{id}
+GET    /api/appointments
+GET    /api/appointments/search?doctorId=2
+GET    /api/appointments/search?date=2026-11-20
+GET    /api/appointments/search?documentNumber=30111222
+GET    /api/appointments/search?patientName=lovelace
+GET    /api/appointments/search?doctorId=2&date=2026-11-20
+GET    /api/appointments/{id}
+POST   /api/appointments
+PATCH  /api/appointments/{id}
+DELETE /api/appointments/{id}
 ```
 
-| Filtro      | Tipo      | Regla                                             |
-| ----------- | --------- | ------------------------------------------------- |
-| `patientId` | `integer` | Positivo. Si no existe, devuelve `data: []`       |
-| `doctorId`  | `integer` | Positivo. Si no existe, devuelve `data: []`       |
-| `date`      | `date`    | `YYYY-MM-DD`. Se compara contra la columna `date` |
+| Filtro           | Tipo      | Regla                                                              |
+| ---------------- | --------- | ------------------------------------------------------------------ |
+| `doctorId`       | `integer` | Positivo. Si no existe, devuelve `data: []`                        |
+| `date`           | `date`    | `YYYY-MM-DD`. Trae los turnos de **ese día**, comparando por rango |
+| `documentNumber` | `string`  | Documento del paciente. Igualdad exacta                            |
+| `patientName`    | `string`  | Parte del nombre o del apellido del paciente, sin distinguir mayúsculas |
 
-Los tres son opcionales y se combinan con `AND`. Sin filtros, `/search` devuelve la colección completa ordenada por fecha descendente.
+Los cuatro son opcionales y se combinan con `AND`. `documentNumber` y `patientName` filtran a través de la tabla `patients`, no de `appointments`: eso obliga a un `include` con `required: true` para que el filtro se convierta en `INNER JOIN` en lugar de dejar filas con `patient: null`.
+
+Sin filtros, `/search` devuelve la colección completa **ordenada por fecha y hora ascendente**: es una agenda, primero lo que viene.
+
+**Cancelar un turno**
+
+Cancelar no es `DELETE`: es un cambio de estado, con fecha de cancelación.
+
+```http
+PATCH /api/appointments/{id}
+{ "status": "CANCELLED" }
+```
+
+| Regla                                         | Respuesta                                  |
+| --------------------------------------------- | ------------------------------------------ |
+| `status` cambia a `CANCELLED`                 | `200`, y el servidor completa `cancelledAt` |
+| Ya estaba `CANCELLED`                         | `409` `APPOINTMENT_ALREADY_CANCELLED`      |
+| `status` con un valor fuera del enum          | `400` `VALIDATION_ERROR`                   |
 
 > [!IMPORTANT]
-> Los query params llegan **como string**, siempre. `?patientId=abc` no es un número y `?date=20-11-2026` no es ISO 8601. Validalos con un DTO de query (Yup + un middleware `validateQuery`) antes de tocar el modelo: si un `NaN` llega al `where`, la consulta falla con un error de base y el cliente recibe `500` en lugar de `400`.
+> Los query params llegan **como string**, siempre. `?doctorId=abc` no es un número y `?date=20-11-2026` no es ISO 8601. Validalos con un DTO de query (Yup + un middleware `validateQuery`) antes de tocar el modelo: si un `NaN` llega al `where`, la consulta falla con un error de base y el cliente recibe `500` en lugar de `400`.
 
 > [!NOTE]
-> `/search` va declarado **antes** de `/:id`, igual que en `users`. Si invertís el orden, `GET /api/encounters/search` entra por el validador de id y responde `INVALID_ID`.
+> `?date=2026-11-20` **no** se traduce a `scheduled_at = '2026-11-20'`. Se traduce a un rango: `scheduled_at >= 2026-11-20T00:00` y `scheduled_at < 2026-11-21T00:00`. Un turno a las 14:30 tiene que entrar en el filtro del día, y con igualdad no entra nunca.
+
+> [!NOTE]
+> `/search` va declarado **antes** de `/:id`, igual que en `users`. Si invertís el orden, `GET /api/appointments/search` entra por el validador de id y responde `INVALID_ID`.
 
 **Tabla completa de la API después de esta clase**
 
-| Método   | Path                     | Éxito | Errores esperados                       |
-| -------- | ------------------------ | ----- | --------------------------------------- |
-| `GET`    | `/api/health`            | `200` | —                                       |
-| `GET`    | `/api/users`             | `200` | —                                       |
-| `GET`    | `/api/users/search`      | `200` | —                                       |
-| `GET`    | `/api/users/{id}`        | `200` | `400` `INVALID_ID`, `404`               |
-| `POST`   | `/api/users`             | `201` | `400`, `409`                            |
-| `PATCH`  | `/api/users/{id}`        | `200` | `400`, `404`, `409`                     |
-| `DELETE` | `/api/users/{id}`        | `204` | `400`, `404`                            |
-| `GET`    | `/api/patients`          | `200` | —                                       |
-| `GET`    | `/api/patients/search`   | `200` | —                                       |
-| `GET`    | `/api/patients/{id}`     | `200` | `400`, `404`                            |
-| `POST`   | `/api/patients`          | `201` | `400`, `409`                            |
-| `PATCH`  | `/api/patients/{id}`     | `200` | `400`, `404`, `409`                     |
-| `DELETE` | `/api/patients/{id}`     | `204` | `400`, `404`, `409` si tiene atenciones |
-| `GET`    | `/api/doctors`           | `200` | —                                       |
-| `GET`    | `/api/doctors/search`    | `200` | —                                       |
-| `GET`    | `/api/doctors/{id}`      | `200` | `400`, `404`                            |
-| `POST`   | `/api/doctors`           | `201` | `400`, `409`                            |
-| `PATCH`  | `/api/doctors/{id}`      | `200` | `400`, `404`, `409`                     |
-| `DELETE` | `/api/doctors/{id}`      | `204` | `400`, `404`, `409` si tiene atenciones |
-| `GET`    | `/api/nurses`            | `200` | —                                       |
-| `GET`    | `/api/nurses/search`     | `200` | —                                       |
-| `GET`    | `/api/nurses/{id}`       | `200` | `400`, `404`                            |
-| `POST`   | `/api/nurses`            | `201` | `400`, `409`                            |
-| `PATCH`  | `/api/nurses/{id}`       | `200` | `400`, `404`, `409`                     |
-| `DELETE` | `/api/nurses/{id}`       | `204` | `400`, `404`                            |
-| `GET`    | `/api/encounters`        | `200` | —                                       |
-| `GET`    | `/api/encounters/search` | `200` | `400` si un filtro es inválido          |
-| `GET`    | `/api/encounters/{id}`   | `200` | `400`, `404`                            |
-| `POST`   | `/api/encounters`        | `201` | `400` paciente o médico inexistente     |
-| `PATCH`  | `/api/encounters/{id}`   | `200` | `400`, `404`, `409`                     |
-| `DELETE` | `/api/encounters/{id}`   | `204` | `400`, `404`                            |
-| `GET`    | `/api/specialties`       | `200` | —                                       |
-| `GET`    | `/api/specialties/{id}`  | `200` | `400`, `404`                            |
+| Método   | Path                       | Éxito | Errores esperados                            |
+| -------- | -------------------------- | ----- | -------------------------------------------- |
+| `GET`    | `/api/health`              | `200` | —                                            |
+| `GET`    | `/api/users`               | `200` | —                                            |
+| `GET`    | `/api/users/search`        | `200` | —                                            |
+| `GET`    | `/api/users/{id}`          | `200` | `400` `INVALID_ID`, `404`                    |
+| `POST`   | `/api/users`               | `201` | `400`, `409`                                 |
+| `PATCH`  | `/api/users/{id}`          | `200` | `400`, `404`, `409`                          |
+| `DELETE` | `/api/users/{id}`          | `204` | `400`, `404`                                 |
+| `GET`    | `/api/patients`            | `200` | —                                            |
+| `GET`    | `/api/patients/search`     | `200` | —                                            |
+| `GET`    | `/api/patients/{id}`       | `200` | `400`, `404`                                 |
+| `POST`   | `/api/patients`            | `201` | `400`, `409`                                 |
+| `PATCH`  | `/api/patients/{id}`       | `200` | `400`, `404`, `409`                          |
+| `DELETE` | `/api/patients/{id}`       | `204` | `400`, `404`, `409` si tiene turnos          |
+| `GET`    | `/api/doctors`             | `200` | —                                            |
+| `GET`    | `/api/doctors/search`      | `200` | —                                            |
+| `GET`    | `/api/doctors/{id}`        | `200` | `400`, `404`                                 |
+| `POST`   | `/api/doctors`             | `201` | `400`, `409`                                 |
+| `PATCH`  | `/api/doctors/{id}`        | `200` | `400`, `404`, `409`                          |
+| `DELETE` | `/api/doctors/{id}`        | `204` | `400`, `404`, `409` si tiene turnos          |
+| `GET`    | `/api/nurses`              | `200` | —                                            |
+| `GET`    | `/api/nurses/search`       | `200` | —                                            |
+| `GET`    | `/api/nurses/{id}`         | `200` | `400`, `404`                                 |
+| `POST`   | `/api/nurses`              | `201` | `400`, `409`                                 |
+| `PATCH`  | `/api/nurses/{id}`         | `200` | `400`, `404`, `409`                          |
+| `DELETE` | `/api/nurses/{id}`         | `204` | `400`, `404`                                 |
+| `GET`    | `/api/appointments`        | `200` | —                                            |
+| `GET`    | `/api/appointments/search` | `200` | `400` si un filtro es inválido               |
+| `GET`    | `/api/appointments/{id}`   | `200` | `400`, `404`                                 |
+| `POST`   | `/api/appointments`        | `201` | `400` FK inexistente, `409` horario ocupado  |
+| `PATCH`  | `/api/appointments/{id}`   | `200` | `400`, `404`, `409` cancelado o turno ocupado |
+| `DELETE` | `/api/appointments/{id}`   | `204` | `400`, `404`                                 |
+| `GET`    | `/api/specialties`         | `200` | —                                            |
+| `GET`    | `/api/specialties/{id}`    | `200` | `400`, `404`                                 |
 
 **Formato de respuesta**
 
@@ -516,14 +558,17 @@ Detalle de un médico, con la relación resuelta:
 }
 ```
 
-Detalle de una atención, con las dos puntas resueltas:
+Detalle de un turno, con las dos puntas resueltas:
 
 ```json
 {
   "data": {
     "id": 1,
-    "date": "2026-11-20",
+    "scheduledAt": "2026-11-20T14:30:00-03:00",
+    "durationMinutes": 30,
     "reason": "Control de presión arterial",
+    "status": "SCHEDULED",
+    "cancelledAt": null,
     "patient": { "id": 1, "firstName": "Ada", "lastName": "Lovelace" },
     "doctor": { "id": 1, "firstName": "Gregory", "lastName": "House" }
   }
@@ -545,10 +590,13 @@ Error:
 > El cuerpo de un médico **no** expone `specialtyId` suelto y además el objeto anidado. Elegí una forma y sostenela en el contrato: acá la forma canónica es `specialty: { id, name }` porque es la que el cliente consume sin una segunda llamada. La entrada, en cambio, recibe `specialtyId` porque es lo que el cliente conoce.
 
 > [!IMPORTANT]
-> La atención devuelve **referencias mínimas**: `patient` y `doctor` con `id`, `firstName` y `lastName`, no las entidades completas. Un `include` sin `attributes` trae todas las columnas de las dos tablas en cada fila de la colección. Proyectá lo que el cliente necesita con `include: [{ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] }]`.
+> El turno devuelve **referencias mínimas**: `patient` y `doctor` con `id`, `firstName` y `lastName`, no las entidades completas. Un `include` sin `attributes` trae todas las columnas de las dos tablas en cada fila de la colección. Proyectá lo que el cliente necesita con `include: [{ model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] }]`.
 
 > [!WARNING]
-> `DELETE /api/patients/{id}` sobre un paciente con atenciones responde `409 PATIENT_HAS_ENCOUNTERS`. No lo resuelvas cambiando `RESTRICT` por `CASCADE` "para que pase la prueba": estarías borrando atenciones que nadie pidió borrar. Si el negocio quiere permitirlo, es una decisión explícita y se documenta.
+> `DELETE /api/patients/{id}` sobre un paciente con turnos responde `409 PATIENT_HAS_APPOINTMENTS`. No lo resuelvas cambiando `RESTRICT` por `CASCADE` "para que pase la prueba": estarías borrando turnos que nadie pidió borrar. Si el negocio quiere permitirlo, es una decisión explícita y se documenta.
+
+> [!NOTE]
+> La entrada recibe `patientId` y `doctorId`; la salida devuelve `patient` y `doctor` anidados. Es la misma asimetría que ya tenés en médicos con `specialtyId` y `specialty`: el cliente escribe ids, el cliente lee objetos. Sostenerla en los cuatro recursos es lo que hace que la API se sienta una sola.
 
 > [!WARNING]
 > No copies controladores cambiando nombres con buscar-y-reemplazar. Copiá la **estructura** y adaptá las reglas. Si dos recursos comparten literalmente el mismo cuerpo, extraé una utilidad; si comparten la forma pero no las reglas, no lo hagas. Una abstracción prematura esconde el dominio y después no sabés dónde vive qué.
@@ -901,17 +949,17 @@ Nurse.init(
 );
 ```
 
-### 5.7 El modelo Encounter
+### 5.7 El modelo Appointment
 
-La tabla que convierte el vínculo paciente–médico en una entidad.
+La tabla que convierte el vínculo paciente–médico en un turno.
 
 ```javascript
 import { DataTypes, Model } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-export class Encounter extends Model {}
+export class Appointment extends Model {}
 
-Encounter.init(
+Appointment.init(
   {
     id: {
       type: DataTypes.INTEGER,
@@ -930,50 +978,87 @@ Encounter.init(
       field: "doctor_id",
       references: { model: "doctors", key: "id" },
     },
-    date: {
-      type: DataTypes.DATEONLY,
+    scheduledAt: {
+      type: DataTypes.DATE,
       allowNull: false,
       validate: {
-        isDate: { msg: "Date must be a valid date (YYYY-MM-DD)" },
+        isDate: { msg: "scheduledAt must be a valid ISO 8601 timestamp" },
+      },
+    },
+    durationMinutes: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 30,
+      validate: {
+        isInt: { msg: "durationMinutes must be an integer" },
+        min: { args: [5], msg: "durationMinutes must be at least 5" },
+        max: { args: [240], msg: "durationMinutes must be at most 240" },
       },
     },
     reason: {
       type: DataTypes.STRING(255),
-      allowNull: false,
+      allowNull: true,
       validate: {
-        notEmpty: { msg: "Reason cannot be empty" },
         len: {
           args: [3, 255],
           msg: "Reason must be between 3 and 255 characters",
         },
       },
     },
+    status: {
+      // "appointment_status" es el tipo ENUM nativo creado en PostgreSQL.
+      // DataTypes.ENUM no sirve acá: Sequelize esperaría un tipo llamado
+      // enum_appointments_status y sync no lo encuentra.
+      type: "appointment_status",
+      allowNull: false,
+      defaultValue: "SCHEDULED",
+      validate: {
+        isIn: {
+          args: [["SCHEDULED", "CANCELLED", "COMPLETED", "NO_SHOW"]],
+          msg: "Invalid status",
+        },
+      },
+    },
+    cancelledAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     sequelize,
-    modelName: "Encounter",
-    tableName: "encounters",
+    modelName: "Appointment",
+    tableName: "appointments",
     underscored: true,
     timestamps: true,
     indexes: [
+      {
+        unique: true,
+        fields: ["doctor_id", "scheduled_at"],
+        name: "appointments_doctor_slot_unique",
+      },
       { fields: ["patient_id"] },
-      { fields: ["doctor_id"] },
-      { fields: ["date"] },
+      { fields: ["scheduled_at"] },
+      { fields: ["status"] },
     ],
   },
 );
 ```
 
-| Detalle                        | Por qué                                                                 |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| Dos FK `allowNull: false`      | Una atención sin paciente o sin médico no es una atención               |
-| `DATEONLY`                     | Se busca por día, no por instante; evita el corrimiento de zona horaria |
-| `indexes` en las tres columnas | Las búsquedas del MVP son exactamente por paciente, médico o fecha      |
-| Sin `unique`                   | El mismo paciente puede volver con el mismo médico el mismo día         |
-| Sin `belongsToMany`            | La tabla tiene datos propios: se modela como entidad, no como pivote    |
+| Detalle                          | Por qué                                                                    |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| Dos FK `allowNull: false`        | Un turno sin paciente o sin médico no es un turno                          |
+| `isIn` sobre `status`            | El ENUM de PostgreSQL no se valida antes de insertar: sin `isIn`, un valor inválido explota en la base |
+| `defaultValue: "SCHEDULED"`      | Un turno nuevo nace agendado, no en un estado indefinido                    |
+| `cancelledAt` separado del status | El estado dice **qué** pasó; la fecha dice **cuándo**. Se pueden auditar por separado |
+| `unique` compuesto con `name`    | La restricción de agenda se detecta por nombre en el error, no por adivinanza |
+| Índices en `scheduled_at` y `status` | La agenda se ordena por fecha y se filtra por estado                    |
+| Sin `belongsToMany`              | El turno tiene datos propios: se modela como entidad, no como pivote        |
 
 > [!IMPORTANT]
-> `reason` en `VARCHAR(255)` es el **motivo** de la consulta, no el diagnóstico. Un campo llamado `diagnosis` convertiría esta tabla en historia clínica, con todo lo que eso exige y que está fuera del alcance.
+> `reason` en `VARCHAR(255)` es el **motivo declarado al agendar**, no el diagnóstico. Un campo llamado `diagnosis` convertiría esta tabla en historia clínica, con todo lo que eso exige y que está fuera del alcance.
+
+> [!NOTE]
+> El `UNIQUE (doctor_id, scheduled_at)` no impide dos turnos solapados: uno de 14:00 a 14:30 y otro de 14:15 a 14:45 comparten médico pero no `scheduled_at`. Detectar eso requiere una consulta con rangos y una transacción, y queda como desafío. La restricción de la base cubre el caso más barato; el resto es regla de negocio.
 
 ### 5.8 Asociaciones, foreign keys y onDelete
 
@@ -996,28 +1081,28 @@ Doctor.belongsTo(Specialty, {
   onUpdate: "CASCADE",
 });
 
-Patient.hasMany(Encounter, {
+Patient.hasMany(Appointment, {
   foreignKey: { name: "patientId", allowNull: false },
-  as: "encounters",
+  as: "appointments",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
-Encounter.belongsTo(Patient, {
+Appointment.belongsTo(Patient, {
   foreignKey: { name: "patientId", allowNull: false },
   as: "patient",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
-Doctor.hasMany(Encounter, {
+Doctor.hasMany(Appointment, {
   foreignKey: { name: "doctorId", allowNull: false },
-  as: "encounters",
+  as: "appointments",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
-Encounter.belongsTo(Doctor, {
+Appointment.belongsTo(Doctor, {
   foreignKey: { name: "doctorId", allowNull: false },
   as: "doctor",
   onDelete: "RESTRICT",
@@ -1034,7 +1119,7 @@ Encounter.belongsTo(Doctor, {
 | `onUpdate: CASCADE`    | Si cambia la PK, se propaga (raro, pero correcto)                       |
 
 > [!NOTE]
-> `Doctor.hasMany(Encounter, { as: "encounters" })` y `Encounter.belongsTo(Doctor, { as: "doctor" })` usan alias distintos a propósito: desde el médico la colección se llama `encounters`; desde la atención, la punta se llama `doctor`. El alias de cada lado describe lo que ese lado ve.
+> `Doctor.hasMany(Appointment, { as: "appointments" })` y `Appointment.belongsTo(Doctor, { as: "doctor" })` usan alias distintos a propósito: desde el médico la colección se llama `appointments`; desde el turno, la punta se llama `doctor`. El alias de cada lado describe lo que ese lado ve.
 
 **Qué significa cada `ON DELETE`**
 
@@ -1063,7 +1148,7 @@ import { Specialty } from "./specialty.model.js";
 import { Patient } from "./patient.model.js";
 import { Doctor } from "./doctor.model.js";
 import { Nurse } from "./nurse.model.js";
-import { Encounter } from "./encounter.model.js";
+import { Appointment } from "./appointment.model.js";
 
 Specialty.hasMany(Doctor, {
   foreignKey: { name: "specialtyId", allowNull: false },
@@ -1079,35 +1164,35 @@ Doctor.belongsTo(Specialty, {
   onUpdate: "CASCADE",
 });
 
-Patient.hasMany(Encounter, {
+Patient.hasMany(Appointment, {
   foreignKey: { name: "patientId", allowNull: false },
-  as: "encounters",
+  as: "appointments",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
-Encounter.belongsTo(Patient, {
+Appointment.belongsTo(Patient, {
   foreignKey: { name: "patientId", allowNull: false },
   as: "patient",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
-Doctor.hasMany(Encounter, {
+Doctor.hasMany(Appointment, {
   foreignKey: { name: "doctorId", allowNull: false },
-  as: "encounters",
+  as: "appointments",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
-Encounter.belongsTo(Doctor, {
+Appointment.belongsTo(Doctor, {
   foreignKey: { name: "doctorId", allowNull: false },
   as: "doctor",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
-export { sequelize, User, Specialty, Patient, Doctor, Nurse, Encounter };
+export { sequelize, User, Specialty, Patient, Doctor, Nurse, Appointment };
 ```
 
 **Regla de oro:** si un controlador necesita un modelo, lo importa de `index.js`, nunca del archivo del modelo. Así las asociaciones siempre están declaradas.
@@ -1238,13 +1323,28 @@ const UNIQUE_CODES = {
   email: "EMAIL_TAKEN",
 };
 
+// Una restricción compuesta no se identifica por una columna: se identifica
+// por el nombre del índice, que es el que PostgreSQL devuelve en el error.
+const CONSTRAINT_CODES = {
+  appointments_doctor_slot_unique: "DOCTOR_SLOT_TAKEN",
+};
+
+const CONFLICT_MESSAGES = {
+  DOCTOR_SLOT_TAKEN: "Doctor already has an appointment at that time",
+};
+
 export const errorHandler = (error, req, res, next) => {
   if (error instanceof UniqueConstraintError) {
+    const constraint = error.parent?.constraint;
     const field = Object.keys(error.fields ?? {})[0];
-    const code = UNIQUE_CODES[field] ?? "DUPLICATE_VALUE";
+    const code =
+      CONSTRAINT_CODES[constraint] ?? UNIQUE_CODES[field] ?? "DUPLICATE_VALUE";
 
     return res.status(409).json({
-      error: { code, message: "Value is already registered" },
+      error: {
+        code,
+        message: CONFLICT_MESSAGES[code] ?? "Value is already registered",
+      },
     });
   }
 
@@ -1274,18 +1374,19 @@ export const errorHandler = (error, req, res, next) => {
 | Error                               | HTTP           | Ejemplo                                             |
 | ----------------------------------- | -------------- | --------------------------------------------------- |
 | `UniqueConstraintError`             | `409`          | `POST /api/patients` con un documento que ya existe |
-| `ForeignKeyConstraintError`         | `400`          | `POST /api/encounters` con `patientId: 999`         |
-| `SequelizeValidationError`          | `400`          | `birthDate: "mañana"`                               |
-| `AppError` (tu clase de la Clase 7) | el que declare | `404` `PATIENT_NOT_FOUND`                           |
+| `UniqueConstraintError` (compuesta) | `409`          | `POST /api/appointments` con el médico ya ocupado a esa hora |
+| `ForeignKeyConstraintError`         | `400`          | `POST /api/appointments` con `patientId: 999`        |
+| `SequelizeValidationError`          | `400`          | `birthDate: "mañana"`                              |
+| `AppError` (tu clase de la Clase 7) | el que declare | `404` `PATIENT_NOT_FOUND`                          |
 
 **El mismo error de Sequelize, dos significados HTTP**
 
 `ForeignKeyConstraintError` aparece en dos situaciones opuestas y no se resuelven igual:
 
-| Operación                               | Qué significa                                    | HTTP  | Código                   |
-| --------------------------------------- | ------------------------------------------------ | ----- | ------------------------ |
-| `POST`/`PATCH` con una FK que no existe | El cuerpo referencia algo inexistente            | `400` | `INVALID_REFERENCE`      |
-| `DELETE` de una fila que tiene hijas    | La fila está en uso; borrarla deja historia rota | `409` | `PATIENT_HAS_ENCOUNTERS` |
+| Operación                               | Qué significa                                    | HTTP  | Código                     |
+| --------------------------------------- | ------------------------------------------------ | ----- | -------------------------- |
+| `POST`/`PATCH` con una FK que no existe | El cuerpo referencia algo inexistente            | `400` | `INVALID_REFERENCE`        |
+| `DELETE` de una fila que tiene hijas    | La fila está en uso; borrarla deja turnos huérfanos | `409` | `PATIENT_HAS_APPOINTMENTS` |
 
 El `errorHandler` global se queda con el `400`, porque no conoce el recurso. El `409` se traduce en el **controller**, que sí sabe qué está borrando:
 
@@ -1309,9 +1410,9 @@ export const deletePatient = async (req, res) => {
     await patient.destroy();
   } catch (error) {
     if (error instanceof ForeignKeyConstraintError) {
-      throw new AppError("Patient has encounters and cannot be deleted", {
+      throw new AppError("Patient has appointments and cannot be deleted", {
         status: 409,
-        code: "PATIENT_HAS_ENCOUNTERS",
+        code: "PATIENT_HAS_APPOINTMENTS",
       });
     }
 
@@ -1323,10 +1424,65 @@ export const deletePatient = async (req, res) => {
 ```
 
 > [!IMPORTANT]
-> No uses `req.method` dentro del `errorHandler` para adivinar el significado. El handler global no sabe qué recurso falló ni qué regla se rompió; el controller sí. Cada `409` con nombre propio (`PATIENT_HAS_ENCOUNTERS`, `DOCTOR_HAS_ENCOUNTERS`) se escribe donde vive la regla.
+> No uses `req.method` dentro del `errorHandler` para adivinar el significado. El handler global no sabe qué recurso falló ni qué regla se rompió; el controller sí. Cada `409` con nombre propio (`PATIENT_HAS_APPOINTMENTS`, `DOCTOR_HAS_APPOINTMENTS`) se escribe donde vive la regla.
 
 > [!NOTE]
-> `error.fields` devuelve **nombres de columna** de la base (`document_number`), no atributos del modelo (`documentNumber`). Si el código no coincide, agregá un `console.log(error.fields)` temporal, verificá el string exacto y borralo. Es debug normal, no magia.
+> `error.fields` devuelve **nombres de columna** de la base (`document_number`), no atributos del modelo (`documentNumber`). `error.parent.constraint` devuelve el **nombre del índice**, y es la única forma confiable de distinguir una restricción compuesta como `appointments_doctor_slot_unique`. Si el nombre no coincide, agregá un `console.log(error.parent?.constraint)` temporal, verificá el string exacto y borralo.
+
+**Cancelar un turno: el estado y la fecha se mueven juntos**
+
+```javascript
+// src/controllers/appointment.controller.js (fragmento)
+import { AppError } from "../errors/app-error.js";
+import { Appointment } from "../models/index.js";
+import { toAppointmentResponse } from "../dtos/appointment.dto.js";
+
+const parties = [
+  { model: Patient, as: "patient", attributes: ["id", "firstName", "lastName"] },
+  { model: Doctor, as: "doctor", attributes: ["id", "firstName", "lastName"] },
+];
+
+export const updateAppointment = async (req, res) => {
+  const appointment = await Appointment.findByPk(req.resourceId, {
+    include: parties,
+  });
+
+  if (!appointment) {
+    throw new AppError("Appointment not found", {
+      status: 404,
+      code: "APPOINTMENT_NOT_FOUND",
+    });
+  }
+
+  const isCancelling = req.dto.status === "CANCELLED";
+
+  if (isCancelling && appointment.status === "CANCELLED") {
+    throw new AppError("Appointment is already cancelled", {
+      status: 409,
+      code: "APPOINTMENT_ALREADY_CANCELLED",
+    });
+  }
+
+  await appointment.update({
+    ...req.dto,
+    ...(isCancelling ? { cancelledAt: new Date() } : {}),
+  });
+
+  await appointment.reload({ include: parties });
+
+  res.json({ data: toAppointmentResponse(appointment) });
+};
+```
+
+| Regla                                     | Dónde vive                                                  |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| `cancelledAt` lo completa el servidor     | No está en el DTO de entrada: el cliente no inventa la hora  |
+| Cancelar dos veces responde `409`         | Controller, que conoce el estado actual                      |
+| Un valor de `status` fuera del enum       | DTO (Yup) y, como red de seguridad, el `isIn` del modelo      |
+| Reprogramar a un horario ocupado          | La restricción compuesta de la base                          |
+
+> [!IMPORTANT]
+> `status` y `cancelledAt` no son dos campos independientes: son un solo hecho. Si dejás que el cliente mande `cancelledAt`, puede cancelar un turno con fecha del año pasado, o marcar `SCHEDULED` y conservar una fecha de cancelación. El servidor los mueve juntos, en una sola operación.
 
 **`include` en el controlador**
 
@@ -1410,7 +1566,7 @@ La regla es simple y no admite excepciones: **si el endpoint existe, está docum
 
 | Obligatorio         | Detalle                                                                                                   |
 | ------------------- | --------------------------------------------------------------------------------------------------------- |
-| Las 33 operaciones  | Health (1), `users` (6), `patients` (6), `doctors` (6), `nurses` (6), `encounters` (6), `specialties` (2) |
+| Las 33 operaciones  | Health (1), `users` (6), `patients` (6), `doctors` (6), `nurses` (6), `appointments` (6), `specialties` (2) |
 | Esquemas de entrada | Un schema por body posible (`PatientInput`, `DoctorInput`…)                                               |
 | Esquemas de salida  | Lo que realmente se devuelve, con el anidamiento incluido                                                 |
 | Códigos de error    | `400`, `404`, `409` con el schema de error común                                                          |
@@ -1423,13 +1579,13 @@ La regla es simple y no admite excepciones: **si el endpoint existe, está docum
 
 ### 6.2 El archivo openapi.yaml
 
-Este es el esqueleto completo y **válido**: health, el CRUD de pacientes y la búsqueda de atenciones, más todos los componentes reutilizables. Los otros recursos se documentan copiando la forma.
+Este es el esqueleto completo y **válido**: health, el CRUD de pacientes y la búsqueda de turnos, más todos los componentes reutilizables. Los otros recursos se documentan copiando la forma.
 
 ```yaml
 openapi: 3.2.1
 info:
   title: Hospital API
-  summary: Pacientes, médicos, enfermeros, atenciones y especialidades
+  summary: Pacientes, médicos, enfermeros, turnos y especialidades
   description: |
     API REST del curso. Los recursos de `users` vienen de la Clase 7.
   version: 1.0.0
@@ -1451,8 +1607,8 @@ tags:
     description: Médicos y su especialidad
   - name: Nurses
     description: Enfermeros
-  - name: Encounters
-    description: Atenciones entre un paciente y un médico
+  - name: Appointments
+    description: Turnos entre un paciente y un médico
   - name: Specialties
     description: Catálogo de especialidades (solo lectura)
 
@@ -1594,19 +1750,12 @@ paths:
         "409":
           $ref: "#/components/responses/InUse"
 
-  /api/encounters/search:
+  /api/appointments/search:
     get:
-      tags: [Encounters]
-      summary: Search encounters by patient, doctor or date
-      operationId: searchEncounters
+      tags: [Appointments]
+      summary: Search appointments by doctor, date or patient
+      operationId: searchAppointments
       parameters:
-        - name: patientId
-          in: query
-          required: false
-          description: Filtra por paciente
-          schema:
-            type: integer
-            minimum: 1
         - name: doctorId
           in: query
           required: false
@@ -1617,13 +1766,27 @@ paths:
         - name: date
           in: query
           required: false
-          description: Filtra por fecha exacta (ISO 8601)
+          description: Filtra los turnos de ese día (ISO 8601). Se compara por rango, no por igualdad
           schema:
             type: string
             format: date
+        - name: documentNumber
+          in: query
+          required: false
+          description: Filtra por documento del paciente
+          schema:
+            type: string
+            pattern: "^[0-9]{7,10}$"
+        - name: patientName
+          in: query
+          required: false
+          description: Parte del nombre o del apellido del paciente, sin distinguir mayúsculas
+          schema:
+            type: string
+            minLength: 2
       responses:
         "200":
-          description: Encounter collection ordered by date, newest first
+          description: Appointment collection ordered by scheduledAt ascending
           content:
             application/json:
               schema:
@@ -1633,14 +1796,17 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: "#/components/schemas/Encounter"
+                      $ref: "#/components/schemas/Appointment"
               examples:
-                byPatient:
+                byDoctor:
                   value:
                     data:
                       - id: 1
-                        date: "2026-11-20"
+                        scheduledAt: "2026-11-20T14:30:00-03:00"
+                        durationMinutes: 30
                         reason: Control de presión arterial
+                        status: SCHEDULED
+                        cancelledAt: null
                         patient:
                           id: 1
                           firstName: Ada
@@ -1845,10 +2011,15 @@ components:
           type: string
           examples: [House]
 
-    EncounterInput:
+    AppointmentStatus:
+      type: string
+      enum: [SCHEDULED, CANCELLED, COMPLETED, NO_SHOW]
+      examples: [SCHEDULED]
+
+    AppointmentInput:
       type: object
       additionalProperties: false
-      required: [patientId, doctorId, date, reason]
+      required: [patientId, doctorId, scheduledAt]
       properties:
         patientId:
           type: integer
@@ -1858,30 +2029,68 @@ components:
           type: integer
           minimum: 1
           examples: [1]
-        date:
+        scheduledAt:
           type: string
-          format: date
-          examples: ["2026-11-20"]
+          format: date-time
+          description: Fecha y hora del turno en ISO 8601, con offset
+          examples: ["2026-11-20T14:30:00-03:00"]
+        durationMinutes:
+          type: integer
+          minimum: 5
+          maximum: 240
+          default: 30
+          examples: [30]
         reason:
           type: string
           minLength: 3
           maxLength: 255
           examples: [Control de presión arterial]
 
-    Encounter:
+    AppointmentUpdate:
       type: object
-      required: [id, date, reason, patient, doctor]
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        doctorId:
+          type: integer
+          minimum: 1
+        scheduledAt:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 5
+          maximum: 240
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 255
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+
+    Appointment:
+      type: object
+      required: [id, scheduledAt, durationMinutes, status, patient, doctor]
       properties:
         id:
           type: integer
           examples: [1]
-        date:
+        scheduledAt:
           type: string
-          format: date
-          examples: ["2026-11-20"]
+          format: date-time
+          examples: ["2026-11-20T14:30:00-03:00"]
+        durationMinutes:
+          type: integer
+          examples: [30]
         reason:
-          type: string
+          type: [string, "null"]
           examples: [Control de presión arterial]
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        cancelledAt:
+          type: [string, "null"]
+          format: date-time
+          examples: [null]
         patient:
           $ref: "#/components/schemas/PatientRef"
         doctor:
@@ -1953,11 +2162,11 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
           examples:
-            patientHasEncounters:
+            patientHasAppointments:
               value:
                 error:
-                  code: PATIENT_HAS_ENCOUNTERS
-                  message: Patient has encounters and cannot be deleted
+                  code: PATIENT_HAS_APPOINTMENTS
+                  message: Patient has appointments and cannot be deleted
 ```
 
 **Lo que falta y te toca**
@@ -1968,11 +2177,11 @@ components:
 | `patients`: los 5 endpoints         | 5        | `paths./api/patients`                   |
 | `doctors`: los 5 endpoints + search | 6        | `paths./api/patients` + `Doctor`        |
 | `nurses`: los 5 endpoints + search  | 6        | `paths./api/patients` + `Nurse`         |
-| `encounters`: los 5 endpoints       | 5        | `paths./api/patients` + `Encounter`     |
+| `appointments`: los 5 endpoints       | 5        | `paths./api/patients` + `Appointment`     |
 | `specialties`: listar y detalle     | 2        | `paths./api/patients/{id}` (solo `get`) |
 | **Total pendiente**                 | **30**   |                                         |
 
-El esqueleto de arriba documenta 3 operaciones (health, el CRUD de pacientes y la búsqueda de atenciones). Con las 30 de la tabla llegás a las 33 de la API completa.
+El esqueleto de arriba documenta 3 operaciones (health, el CRUD de pacientes y la búsqueda de turnos). Con las 30 de la tabla llegás a las 33 de la API completa.
 
 > [!NOTE]
 > El schema `User` se escribe a mano, porque la tabla no se toca pero el contrato sí: `id`, `name`, `email` y `role` (enum `ROLE_USER`/`ROLE_ADMIN`). La columna `password` no aparece, ni en la respuesta ni en el request. Un contrato que documenta una columna que la API nunca devuelve obliga a quien lo lea a probar para saber si miente.
@@ -2006,7 +2215,7 @@ npx @redocly/cli lint docs/openapi.yaml
 > Validar es parte del trabajo, no un extra. `npx @redocly/cli lint` tiene que terminar sin errores antes de dar la tarea por terminada.
 
 > [!NOTE]
-> Sobre los warnings: mientras falten los paths de médicos, enfermeros y atenciones, el linter va a avisar que `Doctor`, `DoctorInput`, `Nurse`, `NurseInput` y `EncounterInput` no se usan (`no-unused-components`). Es esperable en un esqueleto. Cuando termines de documentar las 33 operaciones, ese warning desaparece solo. Un **error** es distinto: no se entrega.
+> Sobre los warnings: mientras falten los paths de médicos, enfermeros y turnos, el linter va a avisar que `Doctor`, `DoctorInput`, `Nurse`, `NurseInput`, `AppointmentInput` y `AppointmentUpdate` no se usan (`no-unused-components`). Es esperable en un esqueleto. Cuando termines de documentar las 33 operaciones, ese warning desaparece solo. Un **error** es distinto: no se entrega.
 
 <sub>[⬆ Volver al índice](#contenido)</sub>
 
@@ -2142,6 +2351,7 @@ clase-08/
 │   └── init/
 │       └── 01-create-test-db.sql
 ├── docs/
+│   ├── backlog.md
 │   ├── openapi.yaml
 │   └── postman/
 │       ├── Hospital-API.postman_collection.json
@@ -2161,14 +2371,14 @@ clase-08/
 │   │   ├── patient.model.js
 │   │   ├── doctor.model.js
 │   │   ├── nurse.model.js
-│   │   └── encounter.model.js
+│   │   └── appointment.model.js
 │   ├── dtos/
 │   │   ├── user.dto.js
 │   │   ├── specialty.dto.js
 │   │   ├── patient.dto.js
 │   │   ├── doctor.dto.js
 │   │   ├── nurse.dto.js
-│   │   └── encounter.dto.js
+│   │   └── appointment.dto.js
 │   ├── errors/
 │   │   └── app-error.js
 │   ├── middlewares/
@@ -2183,7 +2393,7 @@ clase-08/
 │   │   ├── patient.controller.js
 │   │   ├── doctor.controller.js
 │   │   ├── nurse.controller.js
-│   │   └── encounter.controller.js
+│   │   └── appointment.controller.js
 │   └── routes/
 │       ├── index.js
 │       ├── user.routes.js
@@ -2191,13 +2401,13 @@ clase-08/
 │       ├── patient.routes.js
 │       ├── doctor.routes.js
 │       ├── nurse.routes.js
-│       └── encounter.routes.js
+│       └── appointment.routes.js
 └── test/
     ├── setup.js
     ├── patients.test.js
     ├── doctors.test.js
     ├── nurses.test.js
-    └── encounters.test.js
+    └── appointments.test.js
 ```
 
 | Carpeta / archivo | Responsabilidad                              | No debería conocer    |
@@ -2222,7 +2432,7 @@ import { specialtyRouter } from "./specialty.routes.js";
 import { patientRouter } from "./patient.routes.js";
 import { doctorRouter } from "./doctor.routes.js";
 import { nurseRouter } from "./nurse.routes.js";
-import { encounterRouter } from "./encounter.routes.js";
+import { appointmentRouter } from "./appointment.routes.js";
 
 export const apiRouter = Router();
 
@@ -2231,11 +2441,11 @@ apiRouter.use("/specialties", specialtyRouter);
 apiRouter.use("/patients", patientRouter);
 apiRouter.use("/doctors", doctorRouter);
 apiRouter.use("/nurses", nurseRouter);
-apiRouter.use("/encounters", encounterRouter);
+apiRouter.use("/appointments", appointmentRouter);
 ```
 
 > [!NOTE]
-> Un archivo de rutas por recurso, montado en `index.js`. `app.js` solo conoce `/api` y `/docs`. Si mañana agregás `encounters`, tocás un archivo nuevo y una línea del índice; no volvés a leer `app.js`.
+> Un archivo de rutas por recurso, montado en `index.js`. `app.js` solo conoce `/api` y `/docs`. Si mañana agregás `appointments`, tocás un archivo nuevo y una línea del índice; no volvés a leer `app.js`.
 
 <sub>[⬆ Volver al índice](#contenido)</sub>
 
@@ -2248,7 +2458,7 @@ apiRouter.use("/encounters", encounterRouter);
 Extender la API de la Clase 7 con los cuatro recursos hospitalarios, con las tablas creadas desde Sequelize, el contrato completo en OpenAPI, la documentación navegable en `/docs`, una colección de Postman que demuestre el flujo y una suite de tests automatizados que lo proteja.
 
 ```text
-Clase 7 (users)  +  patients, doctors, nurses, encounters, specialties
+Clase 7 (users)  +  patients, doctors, nurses, appointments, specialties
                  +  tablas desde el ORM
                  +  openapi.yaml + Swagger UI
                  +  Postman  (prueba manual, explora el contrato)
@@ -2258,6 +2468,9 @@ Clase 7 (users)  +  patients, doctors, nurses, encounters, specialties
 > [!IMPORTANT]
 > La prueba real de que la tarea está terminada no es "funciona en mi máquina". Es: **clonar el repo, seguir el README, correr tres comandos y llegar al mismo resultado**. Si hace falta TablePlus para que arranque, todavía no está.
 
+> [!NOTE]
+> El desglose de trabajo vive en [`docs/backlog.md`](docs/backlog.md): **el backlog es la lista de issues a desarrollar**, un issue por unidad entregable, con alcance, criterios y dependencias. El estado se sigue en el [tablero del proyecto](https://github.com/users/aduartekopiustech/projects/1). Este README explica el qué y el por qué; el backlog dice en qué orden y con qué criterio se cierra cada pieza.
+
 ### 9.2 Entregables
 
 | #   | Entregable                                          | Dónde                            |
@@ -2265,16 +2478,18 @@ Clase 7 (users)  +  patients, doctors, nurses, encounters, specialties
 | 1   | Cinco modelos nuevos + asociaciones                 | `src/models/`                    |
 | 2   | Script de sincronización y seed                     | `scripts/`                       |
 | 3   | CRUD de los cuatro recursos (20 endpoints)          | `src/{dtos,controllers,routes}/` |
-| 4   | Búsqueda de atenciones por paciente, médico y fecha | `GET /api/encounters/search`     |
+| 4   | Búsqueda de turnos por médico, fecha, documento y nombre | `GET /api/appointments/search` |
 | 5   | Lectura del catálogo de especialidades              | `GET /api/specialties`           |
 | 6   | `409` por documento/matrícula/email duplicado       | `error.middleware.js`            |
-| 7   | `400` por FK inexistente                            | `error.middleware.js`            |
-| 8   | `409` al borrar un paciente o médico con atenciones | `*.controller.js`                |
-| 9   | Contrato completo de la API                         | `docs/openapi.yaml`              |
-| 10  | Swagger UI funcionando                              | `GET /docs`                      |
-| 11  | Colección de Postman exportada                      | `docs/postman/`                  |
-| 12  | Suite de tests automatizados                        | `test/` + `npm test`             |
-| 13  | README del proyecto con el arranque desde cero      | `README.md` del repo de la tarea |
+| 7   | `409` por horario del médico ya ocupado             | `error.middleware.js`            |
+| 8   | `400` por FK inexistente                            | `error.middleware.js`            |
+| 9   | Cancelación de turnos con `status` y `cancelledAt`  | `appointment.controller.js`      |
+| 10  | `409` al borrar un paciente o médico con turnos     | `*.controller.js`                |
+| 11  | Contrato completo de la API                         | `docs/openapi.yaml`              |
+| 12  | Swagger UI funcionando                              | `GET /docs`                      |
+| 13  | Colección de Postman exportada                      | `docs/postman/`                  |
+| 14  | Suite de tests automatizados                        | `test/` + `npm test`             |
+| 15  | README del proyecto con el arranque desde cero      | `README.md` del repo de la tarea |
 
 ### 9.3 Estructura esperada
 
@@ -2314,7 +2529,7 @@ CREATE DATABASE hospital_test;
 > [!WARNING]
 > Los scripts de `docker-entrypoint-initdb.d` corren **solo cuando el volumen está vacío**. Si ya tenías la base levantada, tenés dos opciones: `docker compose down -v` (borra los datos) o crear la base a mano con `CREATE DATABASE hospital_test;` en TablePlus.
 
-**Paso 3 — Escribí los modelos.** Specialty, Patient, Doctor, Nurse y Encounter. Con validaciones, `unique` donde corresponde y las tres FK: `doctors.specialty_id`, `encounters.patient_id` y `encounters.doctor_id`.
+**Paso 3 — Escribí los modelos.** Specialty, Patient, Doctor, Nurse y Appointment. Con validaciones, `unique` donde corresponde y las tres FK: `doctors.specialty_id`, `appointments.patient_id` y `appointments.doctor_id`.
 
 **Paso 4 — Declará las asociaciones** en `models/index.js` y verificá el orden de creación.
 
@@ -2322,9 +2537,9 @@ CREATE DATABASE hospital_test;
 npm run db:reset
 ```
 
-Después, en TablePlus: seis tablas (`users`, `specialties`, `patients`, `doctors`, `nurses`, `encounters`), las tres FK con `ON DELETE RESTRICT` y los índices únicos. **Si las FK no están, el modelo está incompleto.** Probá a mano que `DELETE` de un paciente con atenciones falla: si borra, el `RESTRICT` no existe.
+Después, en TablePlus: seis tablas (`users`, `specialties`, `patients`, `doctors`, `nurses`, `appointments`), el tipo `appointment_status`, las tres FK con `ON DELETE RESTRICT`, el índice `UNIQUE (doctor_id, scheduled_at)` y los índices únicos de documento y matrícula. **Si las FK o el unique compuesto no están, el modelo está incompleto.** Probá a mano que `DELETE` de un paciente con turnos falla: si borra, el `RESTRICT` no existe.
 
-**Paso 5 — DTOs y controladores.** Un DTO de entrada por recurso, uno de salida por recurso, y un DTO de **query** para los filtros de atenciones. Generalizá el validador de id sin cambiar los mensajes existentes:
+**Paso 5 — DTOs y controladores.** Un DTO de entrada por recurso, uno de salida por recurso, un DTO de **query** para los filtros de turnos y un DTO aparte para cancelar. Generalizá el validador de id sin cambiar los mensajes existentes:
 
 ```javascript
 // src/middlewares/validate-id.middleware.js
@@ -2374,7 +2589,7 @@ Postman es una herramienta para **explorar y demostrar** el contrato a mano. No 
 | ---------------------------- | ---------------------------------------------------------- |
 | Colección `Hospital API`     | Formato v2.1, exportada a `docs/postman/`                  |
 | Variable `baseUrl`           | `http://localhost:3000`, en un environment `Local`         |
-| Una carpeta por recurso      | Health, Users, Patients, Doctors, Nurses, Specialties      |
+| Una carpeta por recurso      | Health, Users, Patients, Doctors, Nurses, Appointments, Specialties |
 | Requests en orden de flujo   | Crear → obtener → actualizar → buscar → eliminar           |
 | Scripts de test              | Al menos status y forma del body en cada request           |
 | Encadenamiento por variables | El `id` creado se guarda y lo usan los requests siguientes |
@@ -2471,23 +2686,31 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 | 13  | `POST /api/doctors` con `specialtyId` inexistente                                        | `400` `INVALID_REFERENCE`                                                   |
 | 14  | `GET /api/doctors/{id}`                                                                  | `200` con `specialty: { id, name }`                                         |
 | 15  | `POST /api/doctors` con matrícula repetida (y lo mismo en `nurses`)                      | `409` `LICENSE_NUMBER_TAKEN`                                                |
-| 16  | `POST /api/encounters` con `patientId` inexistente                                       | `400` `INVALID_REFERENCE`                                                   |
-| 17  | `GET /api/encounters/{id}`                                                               | `200` con `patient` y `doctor` anidados                                     |
-| 18  | `GET /api/encounters/search?patientId=` con dos atenciones de ese paciente y una de otro | `200` con exactamente dos                                                   |
-| 19  | `GET /api/encounters/search?doctorId=` y `?date=`                                        | `200` con el subconjunto correcto                                           |
-| 20  | `GET /api/encounters/search?patientId=abc`                                               | `400` `VALIDATION_ERROR`, no `500`                                          |
-| 21  | `DELETE /api/patients/{id}` con una atención asociada                                    | `409` `PATIENT_HAS_ENCOUNTERS`                                              |
-| 22  | `DELETE /api/encounters/{id}` y después `GET`                                            | `204` y `404`                                                               |
-| 23  | `GET /api/users` (regresión de la Clase 7)                                               | `200`, mismo contrato que dejó tu Clase 7 (con `role`, si lo implementaste) |
+| 16  | `POST /api/appointments` con `patientId` inexistente                                     | `400` `INVALID_REFERENCE`                                                   |
+| 17  | `GET /api/appointments/{id}`                                                             | `200` con `patient` y `doctor` anidados                                     |
+| 18  | `POST /api/appointments` para un médico ya ocupado a esa hora                            | `409` `DOCTOR_SLOT_TAKEN`                                                   |
+| 19  | `GET /api/appointments/search?doctorId=` con dos turnos de ese médico y uno de otro      | `200` con exactamente dos                                                   |
+| 20  | `GET /api/appointments/search?date=2026-11-20` con un turno a las 14:30 de ese día       | `200` con ese turno (la igualdad lo dejaría afuera)                          |
+| 21  | `GET /api/appointments/search?documentNumber=` y `?patientName=`                         | `200` con los turnos del paciente correcto                                  |
+| 22  | `GET /api/appointments/search?doctorId=abc`                                              | `400` `VALIDATION_ERROR`, no `500`                                          |
+| 23  | `PATCH /api/appointments/{id}` con `status: "CANCELLED"`                                 | `200`, `cancelledAt` no nulo y el turno sigue existiendo                    |
+| 24  | `PATCH` cancelando un turno ya cancelado                                                 | `409` `APPOINTMENT_ALREADY_CANCELLED`                                       |
+| 25  | `GET /api/appointments` con turnos en fechas distintas                                   | `200` ordenado por `scheduledAt` ascendente                                 |
+| 26  | `DELETE /api/patients/{id}` con un turno asociado                                        | `409` `PATIENT_HAS_APPOINTMENTS`                                            |
+| 27  | `DELETE /api/appointments/{id}` y después `GET`                                          | `204` y `404`                                                               |
+| 28  | `GET /api/users` (regresión de la Clase 7)                                               | `200`, mismo contrato que dejó tu Clase 7 (con `role`, si lo implementaste) |
 
 > [!IMPORTANT]
-> El caso 23 no es opcional. Cuando agregás cuatro recursos, tres FK nuevas y generalizás middlewares, el riesgo real es **romper lo que ya funcionaba**. Un test de regresión sobre `users` demuestra que la extensión no tuvo efectos colaterales.
+> El caso 28 no es opcional. Cuando agregás cuatro recursos, tres FK nuevas y generalizás middlewares, el riesgo real es **romper lo que ya funcionaba**. Un test de regresión sobre `users` demuestra que la extensión no tuvo efectos colaterales.
 
 > [!WARNING]
-> Los casos 18 y 19 no prueban "devuelve 200". Prueban **qué devuelve**: creá dos atenciones del paciente A y una del paciente B, y verificá que el filtro trae exactamente dos. Un endpoint de búsqueda que ignora el filtro también responde `200`.
+> Los casos 19 a 21 no prueban "devuelve 200". Prueban **qué devuelve**. Un endpoint de búsqueda que ignora el filtro también responde `200` con la colección completa. Prepará datos donde el subconjunto esperado sea distinto del total y compará la cantidad y los ids.
 
 > [!NOTE]
 > El caso 21 es el que más se olvida y el que más enseña: el `409` no lo produce tu validación, lo produce la base. Si el test pasa, el `ON DELETE RESTRICT` existe de verdad.
+
+> [!NOTE]
+> El caso 20 es el que separa "funciona" de "funciona bien": si comparás `scheduled_at = '2026-11-20'`, el turno de las 14:30 nunca aparece y el test lo detecta. Es la diferencia entre un filtro de fecha y un filtro de instante.
 
 > [!WARNING]
 > Nunca apuntes los tests a la base de desarrollo. Un `sync({ force: true })` mal ubicado borra los datos que estabas usando para la demo. Si el `.env.test` no existe, la suite tiene que fallar, no caer por default en `.env`.
@@ -2508,16 +2731,19 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 
 **Modelo y esquema**
 
-- [ ] `patients`, `doctors`, `nurses`, `encounters` y `specialties` existen en la base **creadas por Sequelize**, no por DDL manual.
+- [ ] `patients`, `doctors`, `nurses`, `appointments` y `specialties` existen en la base **creadas por Sequelize**, no por DDL manual.
 - [ ] `npm run db:sync` crea el esquema desde cero y es idempotente.
 - [ ] `npm run db:reset` recrea todo y siembra el catálogo.
 - [ ] `doctors.specialty_id` es `NOT NULL` y tiene FK a `specialties(id)` con `ON DELETE RESTRICT`.
-- [ ] `encounters.patient_id` y `encounters.doctor_id` son `NOT NULL` y tienen FK con `ON DELETE RESTRICT`.
+- [ ] `appointments.patient_id` y `appointments.doctor_id` son `NOT NULL` y tienen FK con `ON DELETE RESTRICT`.
 - [ ] `document_number`, `license_number`, `email` y `specialties.name` tienen restricción `UNIQUE`.
-- [ ] `birth_date` y `encounters.date` son `DATE` y viajan como `YYYY-MM-DD`.
+- [ ] `birth_date` es `DATE` y viaja como `YYYY-MM-DD`; `scheduled_at` es `TIMESTAMPTZ` y viaja como ISO 8601 con offset.
+- [ ] Existe el tipo `appointment_status` con `SCHEDULED`, `CANCELLED`, `COMPLETED` y `NO_SHOW`.
+- [ ] `appointments.status` es `NOT NULL` con `DEFAULT 'SCHEDULED'`.
+- [ ] Existe el índice único `appointments_doctor_slot_unique` sobre `(doctor_id, scheduled_at)`.
 - [ ] `created_at` y `updated_at` existen en las cinco tablas nuevas.
-- [ ] `Patient hasMany Encounter`, `Doctor hasMany Encounter` y sus `belongsTo` están declarados y se usan con `include`.
-- [ ] `encounters` tiene índices en `patient_id`, `doctor_id` y `date`.
+- [ ] `Patient hasMany Appointment`, `Doctor hasMany Appointment` y sus `belongsTo` están declarados y se usan con `include`.
+- [ ] `appointments` tiene índices en `patient_id`, `scheduled_at` y `status`.
 - [ ] Los modelos se importan desde `models/index.js`, no desde el archivo suelto.
 
 **Endpoints**
@@ -2529,15 +2755,22 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 - [ ] `POST` responde `201` con header `Location`.
 - [ ] Documento o matrícula repetidos responden `409` con el código correcto.
 - [ ] `specialtyId` o `patientId`/`doctorId` inexistentes responden `400` `INVALID_REFERENCE`.
-- [ ] `GET /api/encounters/search` filtra por `patientId`, por `doctorId` y por `date`.
-- [ ] Los filtros de atenciones se combinan con `AND`.
-- [ ] `GET /api/encounters/search?patientId=abc` responde `400`, no `500`.
-- [ ] Las atenciones se devuelven ordenadas por fecha descendente.
-- [ ] `POST /api/encounters` devuelve `patient` y `doctor` anidados, no solo los ids.
-- [ ] `DELETE` de un paciente o médico con atenciones responde `409`.
-- [ ] `DELETE /api/encounters/{id}` responde `204` y la atención deja de existir.
+- [ ] Dos turnos del mismo médico a la misma hora responden `409` `DOCTOR_SLOT_TAKEN`.
+- [ ] `GET /api/appointments/search` filtra por `doctorId`, `date`, `documentNumber` y `patientName`.
+- [ ] `?date=2026-11-20` devuelve los turnos de ese día, incluidos los de las 14:30.
+- [ ] `?patientName=` busca en nombre y apellido sin distinguir mayúsculas.
+- [ ] Los filtros de turnos se combinan con `AND`.
+- [ ] `GET /api/appointments/search?doctorId=abc` responde `400`, no `500`.
+- [ ] Los turnos se devuelven ordenados por `scheduledAt` ascendente.
+- [ ] `POST /api/appointments` devuelve `patient` y `doctor` anidados, no solo los ids.
+- [ ] `PATCH` con `status: "CANCELLED"` responde `200`, completa `cancelledAt` y el turno sigue existiendo.
+- [ ] Cancelar un turno ya cancelado responde `409` `APPOINTMENT_ALREADY_CANCELLED`.
+- [ ] Un `status` fuera del enum responde `400`.
+- [ ] `DELETE` de un paciente o médico con turnos responde `409`.
+- [ ] `DELETE /api/appointments/{id}` responde `204` y el turno deja de existir.
 - [ ] Bodies inválidos responden `400` con `details`.
 - [ ] Un campo desconocido en el body responde `400`.
+- [ ] `cancelledAt` no se acepta en el body de entrada: lo completa el servidor.
 - [ ] IDs inexistentes responden `404`; IDs no numéricos, `400` `INVALID_ID`.
 - [ ] `PATCH` con body vacío responde `400`.
 - [ ] `DELETE` responde `204` sin body.
@@ -2550,13 +2783,14 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 - [ ] `docs/openapi.yaml` documenta las 33 operaciones, con entrada, salida y errores.
 - [ ] Hay al menos un ejemplo por schema y por respuesta.
 - [ ] `400`, `404`, `409` por duplicado y `409` por recurso en uso están documentados como respuestas reutilizables.
-- [ ] Los parámetros de búsqueda de atenciones están documentados como `query`.
+- [ ] `AppointmentStatus` está documentado como enum con los cuatro valores.
+- [ ] Los parámetros de búsqueda de turnos están documentados como `query`.
 - [ ] Los `operationId` son únicos.
 - [ ] `npx @redocly/cli lint docs/openapi.yaml` termina sin errores.
 - [ ] `GET /openapi.yaml` sirve el contrato.
 - [ ] `GET /docs` muestra la UI y agrupa por tags.
 - [ ] **Try it out** de `POST /api/patients` devuelve `201`.
-- [ ] **Try it out** de `GET /api/encounters/search` devuelve `200` con el filtro aplicado.
+- [ ] **Try it out** de `GET /api/appointments/search` devuelve `200` con el filtro aplicado.
 - [ ] `/docs` y `/openapi.yaml` se registran antes del `notFoundHandler`.
 
 **Postman**
@@ -2565,9 +2799,10 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 - [ ] El environment `Local` con `baseUrl` está exportado.
 - [ ] Hay una carpeta por recurso, con el flujo completo.
 - [ ] Los ids se capturan con scripts, no a mano.
-- [ ] La colección crea un paciente y un médico antes de crear una atención.
-- [ ] La colección prueba los tres filtros de atenciones por separado y uno combinado.
-- [ ] La colección verifica el `409` al borrar un paciente con atenciones.
+- [ ] La colección crea un paciente y un médico antes de crear un turno.
+- [ ] La colección prueba los cuatro filtros de turnos por separado y uno combinado.
+- [ ] La colección cancela un turno con `PATCH` y verifica que sigue existiendo con `cancelledAt`.
+- [ ] La colección verifica el `409` al borrar un paciente con turnos.
 - [ ] La colección cubre `400`, `404` y `409`.
 - [ ] La colección corre entera con el Collection Runner sobre una base recién sembrada.
 - [ ] El JSON exportado no contiene secretos ni datos reales.
@@ -2580,8 +2815,9 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 - [ ] No depende del orden de ejecución de los archivos.
 - [ ] Cubre el camino feliz de los cuatro recursos.
 - [ ] Cubre `400`, `404`, `409` y `INVALID_ID`.
-- [ ] Cubre los filtros de atenciones por paciente, médico y fecha.
-- [ ] Cubre el `409` al borrar un paciente con atenciones.
+- [ ] Cubre los filtros por médico, fecha, documento y nombre.
+- [ ] Cubre la cancelación y el `409` al cancelar dos veces.
+- [ ] Cubre el `409` al borrar un paciente con turnos.
 - [ ] Cubre la regresión de `users`.
 - [ ] Cierra el pool y el proceso al terminar.
 - [ ] Un test que falla hace que `npm test` salga con código distinto de `0`.
@@ -2598,16 +2834,18 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 
 ### 9.8 Desafíos
 
-1. **Rango de fechas.** `GET /api/encounters/search?from=2026-11-01&to=2026-11-30`, validando que `from <= to`.
-2. **Filtro por especialidad.** `GET /api/doctors?specialtyId=2` y documentarlo como parámetro de query.
-3. **Búsqueda por apellido y matrícula.** `GET /api/doctors/search?keywords=` busca en `lastName` y `licenseNumber`.
-4. **Paginación.** `?limit=&offset=` con `meta: { total, limit, offset }` en la respuesta.
-5. **Historial del paciente.** `GET /api/patients/{id}/encounters`, ordenado por fecha descendente.
-6. **Tag por recurso con descripción.** Usar el `description` del Tag Object para explicar cada grupo en la UI.
-7. **Newman en el flujo.** Script `npm run test:api` que corre la colección y sale con el código de Newman.
-8. **Cobertura.** Medir cobertura con `node --test --experimental-test-coverage` y reportar los números.
-9. **Seed de demo.** Un script que cargue dos especialidades, dos médicos, dos pacientes, dos enfermeros y tres atenciones para la presentación.
-10. **Contrato como fuente.** Generar un test que valide respuestas reales contra el schema de OpenAPI.
+1. **Solapamiento de turnos.** Rechazar dos turnos del mismo médico cuyos rangos se crucen (`scheduled_at` + `duration_minutes`), no solo cuando coinciden exactos. Necesita una consulta con `Op.lt`/`Op.gt` y una transacción.
+2. **Rango de fechas.** `GET /api/appointments/search?from=2026-11-01&to=2026-11-30`, validando que `from <= to`.
+3. **Filtro por especialidad.** `GET /api/doctors?specialtyId=2` y documentarlo como parámetro de query.
+4. **Búsqueda por apellido y matrícula.** `GET /api/doctors/search?keywords=` busca en `lastName` y `licenseNumber`.
+5. **Paginación.** `?limit=&offset=` con `meta: { total, limit, offset }` en la respuesta.
+6. **Agenda del paciente.** `GET /api/patients/{id}/appointments`, ordenado por `scheduledAt` descendente.
+7. **Disponibilidad.** `GET /api/doctors/{id}/availability?date=` que devuelva las franjas libres según la duración configurada.
+8. **Tag por recurso con descripción.** Usar el `description` del Tag Object para explicar cada grupo en la UI.
+9. **Newman en el flujo.** Script `npm run test:api` que corre la colección y sale con el código de Newman.
+10. **Cobertura.** Medir cobertura con `node --test --experimental-test-coverage` y reportar los números.
+11. **Seed de demo.** Un script que cargue dos especialidades, dos médicos, dos pacientes, dos enfermeros y tres turnos para la presentación.
+12. **Contrato como fuente.** Generar un test que valide respuestas reales contra el schema de OpenAPI.
 
 > [!TIP]
 > Ningún desafío requiere cambiar el patrón. Si para agregar un filtro tenés que tocar cinco archivos, la separación está bien; si tenés que reescribir el controlador, revisá qué lógica quedó en el lugar equivocado.
@@ -2622,14 +2860,22 @@ Este es el objetivo de aprendizaje más importante de la clase y **no viene resu
 | `SQLITE_ERROR`/`relation` al sync                         | Orden de imports: `sync` antes de las asociaciones           | Importar `models/index.js` en el script                        |
 | `SequelizeUniqueConstraintError` como `500`               | No está mapeado en el `errorHandler`                         | Agregar el `instanceof` → `409`                                |
 | `SequelizeForeignKeyConstraintError` como `500`           | Ídem                                                         | Mapear a `400` `INVALID_REFERENCE`                             |
-| `DELETE` de un paciente responde `500`                    | La FK tiene hijas y el error no se tradujo                   | Capturarlo en el controller → `409` `PATIENT_HAS_ENCOUNTERS`   |
-| `DELETE` de un paciente borra sus atenciones              | `onDelete: "CASCADE"` en `encounters`                        | Cambiar a `RESTRICT` y recrear el esquema                      |
-| `patient is not associated to encounter!`                 | Falta el `belongsTo` de `Encounter` a `Patient`              | Declarar la asociación en `models/index.js`                    |
+| `DELETE` de un paciente responde `500`                    | La FK tiene hijas y el error no se tradujo                   | Capturarlo en el controller → `409` `PATIENT_HAS_APPOINTMENTS`   |
+| `DELETE` de un paciente borra sus turnos              | `onDelete: "CASCADE"` en `appointments`                        | Cambiar a `RESTRICT` y recrear el esquema                      |
+| `patient is not associated to appointment!`                 | Falta el `belongsTo` de `Appointment` a `Patient`              | Declarar la asociación en `models/index.js`                    |
 | `Truncated incorrect INTEGER value` / `NaN` en el `where` | El filtro de query llegó como string sin validar             | DTO de query con Yup + `validateQuery`                         |
-| `GET /api/encounters/search` responde `INVALID_ID`        | `/search` declarado después de `/:id`                        | Reordenar las rutas                                            |
-| El filtro de atenciones ignora `date`                     | Se comparó contra `created_at` en lugar de `date`            | Usar la columna `date` en el `where`                           |
-| Las atenciones se devuelven desordenadas                  | Falta `order`                                                | `order: [["date", "DESC"], ["id", "DESC"]]`                    |
-| `POST /api/encounters` devuelve solo ids                  | Falta `reload({ include })` o el DTO no proyecta las puntas  | Recargar e incluir `patient` y `doctor`                        |
+| `GET /api/appointments/search` responde `INVALID_ID`      | `/search` declarado después de `/:id`                        | Reordenar las rutas                                            |
+| El filtro `?date=` no devuelve nada                       | Se comparó `scheduled_at = '2026-11-20'` (instante contra día) | Rango con `Op.gte` / `Op.lt` sobre las 00:00 del día y del siguiente |
+| El filtro por nombre no encuentra nada                    | Se usó `like` o `=` en lugar de `iLike`                       | `Op.iLike` con `%${q}%` en `firstName` y `lastName`            |
+| El filtro por documento no filtra                         | El `include` quedó como `LEFT JOIN` (`required: false`)       | `required: true` cuando hay filtros sobre el paciente          |
+| Los turnos se devuelven desordenados                      | Falta `order`                                                | `order: [["scheduledAt", "ASC"], ["id", "ASC"]]`               |
+| `invalid input value for enum appointment_status`         | Un `status` que esquiva el DTO y llega a la base              | `isIn` en el modelo y `oneOf` en el DTO                        |
+| `cannot cast type appointment_status to enum_...`         | Se usó `DataTypes.ENUM` con un tipo nativo ya creado          | Declarar `type: "appointment_status"`                          |
+| El `409` de horario ocupado no aparece                    | Falta el índice `appointments_doctor_slot_unique`             | Declararlo en `indexes` y recrear el esquema                   |
+| `error.parent.constraint` llega `undefined`               | El índice no tiene `name` declarado                           | Nombrar el índice en el modelo                                 |
+| Se puede cancelar un turno dos veces                      | Falta la validación de estado en el controller                | `409` `APPOINTMENT_ALREADY_CANCELLED`                          |
+| `cancelledAt` lo manda el cliente                         | El campo está en el DTO de entrada                            | Sacarlo: lo completa el servidor                               |
+| `POST /api/appointments` devuelve solo ids                | Falta `reload({ include })` o el DTO no proyecta las puntas   | Recargar e incluir `patient` y `doctor`                        |
 | `409` con el código equivocado                            | `error.fields` trae el nombre de columna, no el del atributo | Ajustar el mapa de códigos                                     |
 | `POST /api/doctors` responde `specialty: undefined`       | Falta `reload({ include })` después del `create`             | Recargar con `include` antes de responder                      |
 | `ON DELETE CASCADE` borró médicos sin querer              | `onDelete` mal elegido                                       | Usar `RESTRICT` en catálogos                                   |
