@@ -7,7 +7,7 @@ Suite de integración HTTP con `node:test` y `supertest` ejecutada con `npm test
 ## Tareas
 
 - [x] Slice 1 — `test/issue-09-infra`: `supertest`, `.env.test.example`, `.gitignore`, `docker/init/01-create-test-db.sql`, `docker-compose.yaml`, `src/config/native-enums.js`, `scripts/sync.js`, `test/setup.js`, `test/health-users.test.js`, `test/patients.test.js`, `test/specialties.test.js`.
-- [ ] Slice 2 — `test/issue-09-doctors-nurses`: `test/doctors.test.js` y `test/nurses.test.js`.
+- [x] Slice 2 — `test/issue-09-doctors-nurses`: `test/doctors.test.js` y `test/nurses.test.js`.
 - [ ] Slice 3 — `test/issue-09-appointments`: `test/appointments.test.js`.
 
 ## Criterios de aceptación
@@ -40,3 +40,4 @@ Slices 1 y 2 usan `Part of #9`; Slice 3 usa `Closes #9`. El usuario mergea en or
 ## Evidencia
 
 - Slice 1: `npm test` pasó dos veces seguidas (`22` tests, `4` suites, `0` fallos, `exit=0`, terminación limpia). Independencia de orden verificada ejecutando cada archivo por separado (`specialties` 4, `patients` 11, `health-users` 7) y los 3 en orden inverso. Guard `DB_NAME=hospitaldb npm test` rechazó ejecución con `exit=1` (`Refusing to run tests against database "hospitaldb": DB_NAME must be hospital_test`), falta de `.env.test` falló con `exit=9`, y `node --env-file=.env.test scripts/sync.js` sincronizó `hospital_test` (`exit=0`). Snapshot de `hospitaldb` sin cambios (`0|0|0|0|0|5` antes y después). Verificador independiente confirmó inspección estática, dos corridas de `npm test` (`22/22`, `exit=0`) y guard (`exit=1`); `git diff` y `docker exec` quedaron verificados en el padre por timeout de permisos del subagente.
+- Slice 2: `npm test` pasó dos veces seguidas (`44` tests, `6` suites, `0` fallos, `exit=0`). Independencia de orden verificada ejecutando `doctors.test.js` (`11`), `nurses.test.js` (`11`) y los 5 archivos en orden inverso (`44/44`, `exit=0`). Guard `DB_NAME=hospitaldb npm test` rechazó con `exit=1` y snapshot de `hospitaldb` sin cambios (`0|0|0|0|0|5` antes y después).
