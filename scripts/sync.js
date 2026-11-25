@@ -9,32 +9,13 @@
 // Reset destructivo y explícito: npm run db:sync -- --force
 
 import { sequelize } from "../src/models/index.js";
+import { ensureNativeEnums } from "../src/config/native-enums.js";
 
 const force = process.argv.includes("--force");
 
-async function ensureNativeEnums() {
-  // Estos tipos se declaran como strings en los modelos para evitar que
-  // Sequelize genere nombres propios como enum_appointments_status.
-  await sequelize.query(`
-    DO $$
-    BEGIN
-      CREATE TYPE user_role AS ENUM ('ROLE_USER', 'ROLE_ADMIN');
-    EXCEPTION WHEN duplicate_object THEN NULL;
-    END $$;
-  `);
-  await sequelize.query(`
-    DO $$
-    BEGIN
-      CREATE TYPE appointment_status AS ENUM
-        ('SCHEDULED', 'CANCELLED', 'COMPLETED', 'NO_SHOW');
-    EXCEPTION WHEN duplicate_object THEN NULL;
-    END $$;
-  `);
-}
-
 try {
   await sequelize.authenticate();
-  await ensureNativeEnums();
+  await ensureNativeEnums(sequelize);
 
   if (force) {
     console.warn("WARNING: --force drops ALL tables and their data");
