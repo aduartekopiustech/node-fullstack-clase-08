@@ -1113,6 +1113,291 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Appointments",
+      "item": [
+        {
+          "name": "Setup patient for appointments",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('appointmentPatientDocument', `3${Date.now().toString().slice(-9)}`);"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created appointment patient', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.collectionVariables.set('appointmentPatientId', pm.response.json().data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Appointment\",\n  \"documentNumber\": \"{{appointmentPatientDocument}}\",\n  \"birthDate\": \"1990-01-01\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/patients", "host": ["{{baseUrl}}"], "path": ["api", "patients"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Setup doctor for appointments",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('appointmentDoctorLicense', `MN-${Date.now()}`);"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created appointment doctor', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.collectionVariables.set('appointmentDoctorId', pm.response.json().data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Appointment\",\n  \"licenseNumber\": \"{{appointmentDoctorLicense}}\",\n  \"specialtyId\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/doctors", "host": ["{{baseUrl}}"], "path": ["api", "doctors"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create appointment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created with nested parties', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const { data } = pm.response.json();",
+                  "  pm.expect(pm.response.headers.get('Location')).to.equal(`/api/appointments/${data.id}`);",
+                  "  pm.expect(data.status).to.equal('SCHEDULED');",
+                  "  pm.expect(data.cancelledAt).to.equal(null);",
+                  "  pm.expect(data.patient.id).to.equal(pm.collectionVariables.get('appointmentPatientId'));",
+                  "  pm.expect(data.doctor.id).to.equal(pm.collectionVariables.get('appointmentDoctorId'));",
+                  "  pm.collectionVariables.set('appointmentId', data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{appointmentPatientId}},\n  \"doctorId\": {{appointmentDoctorId}},\n  \"scheduledAt\": \"2027-03-15T14:30:00.000Z\",\n  \"durationMinutes\": 30,\n  \"reason\": \"Control general\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/appointments", "host": ["{{baseUrl}}"], "path": ["api", "appointments"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get appointment by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with appointment detail', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const { data } = pm.response.json();",
+                  "  pm.expect(data.id).to.equal(pm.collectionVariables.get('appointmentId'));",
+                  "  pm.expect(data.patient).to.have.keys(['id', 'firstName', 'lastName']);",
+                  "  pm.expect(data.doctor).to.have.keys(['id', 'firstName', 'lastName']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/appointments/{{appointmentId}}", "host": ["{{baseUrl}}"], "path": ["api", "appointments", "{{appointmentId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update appointment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with updated duration and reason', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const { data } = pm.response.json();",
+                  "  pm.expect(data.durationMinutes).to.equal(45);",
+                  "  pm.expect(data.reason).to.equal('Control actualizado');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"durationMinutes\": 45,\n  \"reason\": \"Control actualizado\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/appointments/{{appointmentId}}", "host": ["{{baseUrl}}"], "path": ["api", "appointments", "{{appointmentId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject duplicate doctor slot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 DOCTOR_SLOT_TAKEN', () => {",
+                  "  pm.response.to.have.status(409);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('DOCTOR_SLOT_TAKEN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{appointmentPatientId}},\n  \"doctorId\": {{appointmentDoctorId}},\n  \"scheduledAt\": \"2027-03-15T14:30:00.000Z\",\n  \"durationMinutes\": 30,\n  \"reason\": \"Turno duplicado\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/appointments", "host": ["{{baseUrl}}"], "path": ["api", "appointments"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject invalid patient reference",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 INVALID_REFERENCE for patient', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('INVALID_REFERENCE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": 999999,\n  \"doctorId\": {{appointmentDoctorId}},\n  \"scheduledAt\": \"2027-03-16T14:30:00.000Z\",\n  \"reason\": \"Referencia inválida\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/appointments", "host": ["{{baseUrl}}"], "path": ["api", "appointments"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject invalid doctor reference",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 INVALID_REFERENCE for doctor', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('INVALID_REFERENCE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{appointmentPatientId}},\n  \"doctorId\": 999999,\n  \"scheduledAt\": \"2027-03-16T14:30:00.000Z\",\n  \"reason\": \"Referencia inválida\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/appointments", "host": ["{{baseUrl}}"], "path": ["api", "appointments"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject invalid appointment id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 INVALID_ID', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('INVALID_ID');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/appointments/abc", "host": ["{{baseUrl}}"], "path": ["api", "appointments", "abc"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Return missing appointment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 APPOINTMENT_NOT_FOUND', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('APPOINTMENT_NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/appointments/999999", "host": ["{{baseUrl}}"], "path": ["api", "appointments", "999999"] }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -1154,6 +1439,26 @@
     },
     {
       "key": "nurseId",
+      "value": ""
+    },
+    {
+      "key": "appointmentPatientDocument",
+      "value": ""
+    },
+    {
+      "key": "appointmentPatientId",
+      "value": ""
+    },
+    {
+      "key": "appointmentDoctorLicense",
+      "value": ""
+    },
+    {
+      "key": "appointmentDoctorId",
+      "value": ""
+    },
+    {
+      "key": "appointmentId",
       "value": ""
     }
   ]
