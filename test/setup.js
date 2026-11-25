@@ -82,3 +82,30 @@ export async function createUser(overrides = {}) {
   assert.equal(res.status, 201);
   return res.body.data;
 }
+
+export async function createDoctor(specialtyId, overrides = {}) {
+  const seq = nextSeq();
+  const res = await request.post("/api/doctors").send({
+    firstName: "Gregory",
+    lastName: "House",
+    licenseNumber: `MN-${10000 + seq}`,
+    specialtyId,
+    ...overrides,
+  });
+
+  assert.equal(res.status, 201);
+  return res.body.data;
+}
+
+export async function createNurse(overrides = {}) {
+  const seq = nextSeq();
+  const res = await request.post("/api/nurses").send({
+    firstName: "Clara",
+    lastName: "Barton",
+    licenseNumber: `EN-${10000 + seq}`,
+    ...overrides,
+  });
+
+  assert.equal(res.status, 201);
+  return res.body.data;
+}
