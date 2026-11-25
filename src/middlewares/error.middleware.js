@@ -1,4 +1,8 @@
-import { UniqueConstraintError, ValidationError } from "sequelize";
+import {
+  ForeignKeyConstraintError,
+  UniqueConstraintError,
+  ValidationError,
+} from "sequelize";
 
 const UNIQUE_ERRORS = {
   email: {
@@ -51,6 +55,17 @@ export const errorHandler = (error, req, res, next) => {
       error: {
         code: conflict?.code ?? "DUPLICATE_VALUE",
         message: conflict?.message ?? "Value is already registered",
+      },
+    });
+  }
+
+  // Una FK inexistente en create/update es una referencia inválida.
+  // Los 409 por borrar recursos en uso se traducen en cada controller.
+  if (error instanceof ForeignKeyConstraintError) {
+    return res.status(400).json({
+      error: {
+        code: "INVALID_REFERENCE",
+        message: "Referenced resource does not exist",
       },
     });
   }
