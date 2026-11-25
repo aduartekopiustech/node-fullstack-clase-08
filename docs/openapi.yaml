@@ -789,6 +789,199 @@ paths:
         "404":
           $ref: "#/components/responses/NurseNotFound"
 
+  /api/appointments:
+    get:
+      tags: [Appointments]
+      summary: List appointments
+      operationId: listAppointments
+      responses:
+        "200":
+          description: Appointment collection ordered by scheduled time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Appointment"
+              examples:
+                appointments:
+                  value:
+                    data:
+                      - { id: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial, status: SCHEDULED, cancelledAt: null, patient: { id: 1, firstName: Ada, lastName: Lovelace }, doctor: { id: 1, firstName: Gregory, lastName: House } }
+    post:
+      tags: [Appointments]
+      summary: Create appointment
+      operationId: createAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentInput"
+            examples:
+              control:
+                value: { patientId: 1, doctorId: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial }
+      responses:
+        "201":
+          description: Appointment created
+          headers:
+            Location:
+              description: URL of the created appointment
+              schema:
+                type: string
+                examples: [/api/appointments/1]
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Appointment"
+              examples:
+                created:
+                  value:
+                    data: { id: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial, status: SCHEDULED, cancelledAt: null, patient: { id: 1, firstName: Ada, lastName: Lovelace }, doctor: { id: 1, firstName: Gregory, lastName: House } }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/DoctorSlotConflict"
+
+  /api/appointments/search:
+    get:
+      tags: [Appointments]
+      summary: Search appointments by doctor, date or patient
+      operationId: searchAppointments
+      parameters:
+        - name: doctorId
+          in: query
+          required: false
+          description: Positive integer doctor id
+          schema:
+            type: integer
+            minimum: 1
+            examples: [1]
+        - name: date
+          in: query
+          required: false
+          description: UTC day in YYYY-MM-DD format; matched as a half-open range
+          schema:
+            type: string
+            format: date
+            examples: ["2026-11-20"]
+        - name: documentNumber
+          in: query
+          required: false
+          description: Exact patient document number
+          schema:
+            type: string
+            pattern: '^[0-9]{7,10}$'
+            examples: ["30111222"]
+        - name: patientName
+          in: query
+          required: false
+          description: Case-insensitive patient first or last name fragment
+          schema:
+            type: string
+            minLength: 1
+            examples: [lovelace]
+      responses:
+        "200":
+          description: Matching appointments ordered by scheduled time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Appointment"
+              examples:
+                matches:
+                  value:
+                    data:
+                      - { id: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial, status: SCHEDULED, cancelledAt: null, patient: { id: 1, firstName: Ada, lastName: Lovelace }, doctor: { id: 1, firstName: Gregory, lastName: House } }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/appointments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Appointments]
+      summary: Get appointment by id
+      operationId: getAppointmentById
+      responses:
+        "200":
+          description: Appointment detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Appointment"
+              examples:
+                appointment:
+                  value:
+                    data: { id: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial, status: SCHEDULED, cancelledAt: null, patient: { id: 1, firstName: Ada, lastName: Lovelace }, doctor: { id: 1, firstName: Gregory, lastName: House } }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/AppointmentNotFound"
+    patch:
+      tags: [Appointments]
+      summary: Update or cancel appointment
+      operationId: updateAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentUpdate"
+            examples:
+              cancel:
+                value: { status: CANCELLED }
+      responses:
+        "200":
+          description: Appointment updated; the server manages cancelledAt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Appointment"
+              examples:
+                cancelled:
+                  value:
+                    data: { id: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial, status: CANCELLED, cancelledAt: "2026-11-21T12:00:00.000Z", patient: { id: 1, firstName: Ada, lastName: Lovelace }, doctor: { id: 1, firstName: Gregory, lastName: House } }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/AppointmentNotFound"
+        "409":
+          $ref: "#/components/responses/AppointmentUpdateConflict"
+    delete:
+      tags: [Appointments]
+      summary: Delete appointment
+      operationId: deleteAppointment
+      responses:
+        "204":
+          description: Appointment deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/AppointmentNotFound"
+
 components:
   parameters:
     Id:
@@ -916,6 +1109,36 @@ components:
           examples:
             missing:
               value: { error: { code: NURSE_NOT_FOUND, message: Nurse not found } }
+
+    DoctorSlotConflict:
+      description: Doctor already has an appointment at that time
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            occupied:
+              value: { error: { code: DOCTOR_SLOT_TAKEN, message: Doctor already has an appointment at that time } }
+    AppointmentNotFound:
+      description: Appointment not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              value: { error: { code: APPOINTMENT_NOT_FOUND, message: Appointment not found } }
+    AppointmentUpdateConflict:
+      description: Appointment slot or cancellation conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            occupied:
+              value: { error: { code: DOCTOR_SLOT_TAKEN, message: Doctor already has an appointment at that time } }
+            alreadyCancelled:
+              value: { error: { code: APPOINTMENT_ALREADY_CANCELLED, message: Appointment is already cancelled } }
 
   schemas:
     Error:
@@ -1125,3 +1348,62 @@ components:
         licenseNumber: { type: string, minLength: 4, maxLength: 20, examples: [RN-55421] }
       examples:
         - { firstName: Nina, lastName: Smith }
+
+    AppointmentStatus:
+      type: string
+      enum: [SCHEDULED, CANCELLED, COMPLETED, NO_SHOW]
+      examples: [SCHEDULED]
+
+    AppointmentParty:
+      type: object
+      required: [id, firstName, lastName]
+      properties:
+        id: { type: integer, examples: [1] }
+        firstName: { type: string, examples: [Ada] }
+        lastName: { type: string, examples: [Lovelace] }
+      examples:
+        - { id: 1, firstName: Ada, lastName: Lovelace }
+
+    Appointment:
+      type: object
+      required: [id, scheduledAt, durationMinutes, reason, status, cancelledAt, patient, doctor]
+      properties:
+        id: { type: integer, examples: [1] }
+        scheduledAt: { type: string, format: date-time, examples: ["2026-11-20T14:30:00.000Z"] }
+        durationMinutes: { type: integer, minimum: 5, maximum: 240, examples: [30] }
+        reason: { type: [string, "null"], examples: [Control de presión arterial] }
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        cancelledAt: { type: [string, "null"], format: date-time, examples: [null] }
+        patient:
+          $ref: "#/components/schemas/AppointmentParty"
+        doctor:
+          $ref: "#/components/schemas/AppointmentParty"
+      examples:
+        - { id: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial, status: SCHEDULED, cancelledAt: null, patient: { id: 1, firstName: Ada, lastName: Lovelace }, doctor: { id: 1, firstName: Gregory, lastName: House } }
+
+    AppointmentInput:
+      type: object
+      required: [patientId, doctorId, scheduledAt]
+      properties:
+        patientId: { type: integer, minimum: 1, examples: [1] }
+        doctorId: { type: integer, minimum: 1, examples: [1] }
+        scheduledAt: { type: string, format: date-time, examples: ["2026-11-20T14:30:00.000Z"] }
+        durationMinutes: { type: integer, minimum: 5, maximum: 240, default: 30, examples: [30] }
+        reason: { type: [string, "null"], minLength: 3, maxLength: 255, examples: [Control de presión arterial] }
+      examples:
+        - { patientId: 1, doctorId: 1, scheduledAt: "2026-11-20T14:30:00.000Z", durationMinutes: 30, reason: Control de presión arterial }
+
+    AppointmentUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        patientId: { type: integer, minimum: 1, examples: [1] }
+        doctorId: { type: integer, minimum: 1, examples: [1] }
+        scheduledAt: { type: string, format: date-time, examples: ["2026-11-20T14:30:00.000Z"] }
+        durationMinutes: { type: integer, minimum: 5, maximum: 240, examples: [45] }
+        reason: { type: [string, "null"], minLength: 3, maxLength: 255, examples: [Control actualizado] }
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+      examples:
+        - { status: CANCELLED }
