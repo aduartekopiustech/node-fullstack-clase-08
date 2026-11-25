@@ -235,6 +235,226 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/patients:
+    get:
+      tags: [Patients]
+      summary: List patients
+      operationId: listPatients
+      responses:
+        "200":
+          description: Patient collection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Patient"
+              examples:
+                patients:
+                  value:
+                    data:
+                      - { id: 1, firstName: Ada, lastName: Lovelace, documentNumber: "30111222", birthDate: "1985-12-10" }
+    post:
+      tags: [Patients]
+      summary: Create patient
+      operationId: createPatient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientInput"
+            examples:
+              ada:
+                value: { firstName: Ada, lastName: Lovelace, documentNumber: "30111222", birthDate: "1985-12-10" }
+      responses:
+        "201":
+          description: Patient created
+          headers:
+            Location:
+              description: URL of the created patient
+              schema:
+                type: string
+                examples: [/api/patients/1]
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Patient"
+              examples:
+                created:
+                  value:
+                    data: { id: 1, firstName: Ada, lastName: Lovelace, documentNumber: "30111222", birthDate: "1985-12-10" }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/DocumentNumberConflict"
+
+  /api/patients/search:
+    get:
+      tags: [Patients]
+      summary: Search patients by first or last name
+      operationId: searchPatients
+      parameters:
+        - name: keywords
+          in: query
+          required: false
+          description: Case-insensitive first or last name fragment
+          schema:
+            type: string
+            examples: [lovelace]
+      responses:
+        "200":
+          description: Matching patients
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Patient"
+              examples:
+                matches:
+                  value:
+                    data:
+                      - { id: 1, firstName: Ada, lastName: Lovelace, documentNumber: "30111222", birthDate: "1985-12-10" }
+
+  /api/patients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Patients]
+      summary: Get patient by id
+      operationId: getPatientById
+      responses:
+        "200":
+          description: Patient detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Patient"
+              examples:
+                patient:
+                  value:
+                    data: { id: 1, firstName: Ada, lastName: Lovelace, documentNumber: "30111222", birthDate: "1985-12-10" }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+    patch:
+      tags: [Patients]
+      summary: Update patient
+      operationId: updatePatient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientUpdate"
+            examples:
+              rename:
+                value: { firstName: Ada, lastName: King }
+      responses:
+        "200":
+          description: Patient updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Patient"
+              examples:
+                updated:
+                  value:
+                    data: { id: 1, firstName: Ada, lastName: King, documentNumber: "30111222", birthDate: "1985-12-10" }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "409":
+          $ref: "#/components/responses/DocumentNumberConflict"
+    delete:
+      tags: [Patients]
+      summary: Delete patient
+      operationId: deletePatient
+      responses:
+        "204":
+          description: Patient deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/PatientNotFound"
+        "409":
+          $ref: "#/components/responses/PatientHasAppointments"
+
+  /api/specialties:
+    get:
+      tags: [Specialties]
+      summary: List specialties
+      operationId: listSpecialties
+      responses:
+        "200":
+          description: Specialty collection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Specialty"
+              examples:
+                specialties:
+                  value:
+                    data:
+                      - { id: 1, name: Cardiología }
+                      - { id: 2, name: Pediatría }
+
+  /api/specialties/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Specialties]
+      summary: Get specialty by id
+      operationId: getSpecialtyById
+      responses:
+        "200":
+          description: Specialty detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Specialty"
+              examples:
+                specialty:
+                  value:
+                    data: { id: 1, name: Cardiología }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/SpecialtyNotFound"
+
 components:
   parameters:
     Id:
@@ -285,6 +505,43 @@ components:
                 error:
                   code: EMAIL_TAKEN
                   message: Email is already registered
+
+    DocumentNumberConflict:
+      description: Document number is already registered
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            duplicate:
+              value: { error: { code: DOCUMENT_NUMBER_TAKEN, message: Document number is already registered } }
+    PatientNotFound:
+      description: Patient not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              value: { error: { code: PATIENT_NOT_FOUND, message: Patient not found } }
+    SpecialtyNotFound:
+      description: Specialty not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              value: { error: { code: SPECIALTY_NOT_FOUND, message: Specialty not found } }
+    PatientHasAppointments:
+      description: Patient has appointments and cannot be deleted
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            inUse:
+              value: { error: { code: PATIENT_HAS_APPOINTMENTS, message: Patient has appointments and cannot be deleted } }
 
   schemas:
     Error:
@@ -385,3 +642,46 @@ components:
           examples: [newpassword123]
       examples:
         - name: Ada King
+
+    Patient:
+      type: object
+      required: [id, firstName, lastName, documentNumber, birthDate]
+      properties:
+        id: { type: integer, examples: [1] }
+        firstName: { type: string, examples: [Ada] }
+        lastName: { type: string, examples: [Lovelace] }
+        documentNumber: { type: string, examples: ["30111222"] }
+        birthDate: { type: string, format: date, examples: ["1985-12-10"] }
+      examples:
+        - { id: 1, firstName: Ada, lastName: Lovelace, documentNumber: "30111222", birthDate: "1985-12-10" }
+
+    PatientInput:
+      type: object
+      required: [firstName, lastName, documentNumber, birthDate]
+      properties:
+        firstName: { type: string, minLength: 2, maxLength: 120, examples: [Ada] }
+        lastName: { type: string, minLength: 2, maxLength: 120, examples: [Lovelace] }
+        documentNumber: { type: string, pattern: '^[0-9]{7,10}$', examples: ["30111222"] }
+        birthDate: { type: string, format: date, examples: ["1985-12-10"] }
+      examples:
+        - { firstName: Ada, lastName: Lovelace, documentNumber: "30111222", birthDate: "1985-12-10" }
+
+    PatientUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        firstName: { type: string, minLength: 2, maxLength: 120, examples: [Ada] }
+        lastName: { type: string, minLength: 2, maxLength: 120, examples: [King] }
+        documentNumber: { type: string, pattern: '^[0-9]{7,10}$', examples: ["30111222"] }
+        birthDate: { type: string, format: date, examples: ["1985-12-10"] }
+      examples:
+        - { firstName: Ada, lastName: King }
+
+    Specialty:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, examples: [1] }
+        name: { type: string, minLength: 3, maxLength: 80, examples: [Cardiología] }
+      examples:
+        - { id: 1, name: Cardiología }
