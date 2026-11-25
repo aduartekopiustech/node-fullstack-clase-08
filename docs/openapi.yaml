@@ -455,6 +455,174 @@ paths:
         "404":
           $ref: "#/components/responses/SpecialtyNotFound"
 
+  /api/doctors:
+    get:
+      tags: [Doctors]
+      summary: List doctors
+      operationId: listDoctors
+      responses:
+        "200":
+          description: Doctor collection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Doctor"
+              examples:
+                doctors:
+                  value:
+                    data:
+                      - { id: 1, firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialty: { id: 2, name: Diagnóstico clínico } }
+    post:
+      tags: [Doctors]
+      summary: Create doctor
+      operationId: createDoctor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DoctorInput"
+            examples:
+              house:
+                value: { firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialtyId: 2 }
+      responses:
+        "201":
+          description: Doctor created
+          headers:
+            Location:
+              description: URL of the created doctor
+              schema:
+                type: string
+                examples: [/api/doctors/1]
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Doctor"
+              examples:
+                created:
+                  value:
+                    data: { id: 1, firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialty: { id: 2, name: Diagnóstico clínico } }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/LicenseNumberConflict"
+
+  /api/doctors/search:
+    get:
+      tags: [Doctors]
+      summary: Search doctors by first or last name
+      operationId: searchDoctors
+      parameters:
+        - name: keywords
+          in: query
+          required: false
+          description: Case-insensitive first or last name fragment
+          schema:
+            type: string
+            examples: [house]
+      responses:
+        "200":
+          description: Matching doctors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Doctor"
+              examples:
+                matches:
+                  value:
+                    data:
+                      - { id: 1, firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialty: { id: 2, name: Diagnóstico clínico } }
+
+  /api/doctors/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Doctors]
+      summary: Get doctor by id
+      operationId: getDoctorById
+      responses:
+        "200":
+          description: Doctor detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Doctor"
+              examples:
+                doctor:
+                  value:
+                    data: { id: 1, firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialty: { id: 2, name: Diagnóstico clínico } }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/DoctorNotFound"
+    patch:
+      tags: [Doctors]
+      summary: Update doctor
+      operationId: updateDoctor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DoctorUpdate"
+            examples:
+              specialty:
+                value: { specialtyId: 1 }
+      responses:
+        "200":
+          description: Doctor updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Doctor"
+              examples:
+                updated:
+                  value:
+                    data: { id: 1, firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialty: { id: 1, name: Cardiología } }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/DoctorNotFound"
+        "409":
+          $ref: "#/components/responses/LicenseNumberConflict"
+    delete:
+      tags: [Doctors]
+      summary: Delete doctor
+      operationId: deleteDoctor
+      responses:
+        "204":
+          description: Doctor deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/DoctorNotFound"
+        "409":
+          $ref: "#/components/responses/DoctorHasAppointments"
+
 components:
   parameters:
     Id:
@@ -481,6 +649,8 @@ components:
                   code: VALIDATION_ERROR
                   message: Invalid request body
                   details: [name is required]
+            invalidReference:
+              value: { error: { code: INVALID_REFERENCE, message: Referenced resource does not exist } }
     NotFound:
       description: Resource not found
       content:
@@ -542,6 +712,34 @@ components:
           examples:
             inUse:
               value: { error: { code: PATIENT_HAS_APPOINTMENTS, message: Patient has appointments and cannot be deleted } }
+
+    LicenseNumberConflict:
+      description: License number is already registered
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            duplicate:
+              value: { error: { code: LICENSE_NUMBER_TAKEN, message: License number is already registered } }
+    DoctorNotFound:
+      description: Doctor not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              value: { error: { code: DOCTOR_NOT_FOUND, message: Doctor not found } }
+    DoctorHasAppointments:
+      description: Doctor has appointments and cannot be deleted
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            inUse:
+              value: { error: { code: DOCTOR_HAS_APPOINTMENTS, message: Doctor has appointments and cannot be deleted } }
 
   schemas:
     Error:
@@ -685,3 +883,38 @@ components:
         name: { type: string, minLength: 3, maxLength: 80, examples: [Cardiología] }
       examples:
         - { id: 1, name: Cardiología }
+
+    Doctor:
+      type: object
+      required: [id, firstName, lastName, licenseNumber, specialty]
+      properties:
+        id: { type: integer, examples: [1] }
+        firstName: { type: string, examples: [Gregory] }
+        lastName: { type: string, examples: [House] }
+        licenseNumber: { type: string, examples: [MN-88421] }
+        specialty:
+          $ref: "#/components/schemas/Specialty"
+      examples:
+        - { id: 1, firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialty: { id: 2, name: Diagnóstico clínico } }
+
+    DoctorInput:
+      type: object
+      required: [firstName, lastName, licenseNumber, specialtyId]
+      properties:
+        firstName: { type: string, minLength: 2, maxLength: 120, examples: [Gregory] }
+        lastName: { type: string, minLength: 2, maxLength: 120, examples: [House] }
+        licenseNumber: { type: string, minLength: 4, maxLength: 20, examples: [MN-88421] }
+        specialtyId: { type: integer, minimum: 1, examples: [2] }
+      examples:
+        - { firstName: Gregory, lastName: House, licenseNumber: MN-88421, specialtyId: 2 }
+
+    DoctorUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        firstName: { type: string, minLength: 2, maxLength: 120, examples: [Gregory] }
+        lastName: { type: string, minLength: 2, maxLength: 120, examples: [House] }
+        licenseNumber: { type: string, minLength: 4, maxLength: 20, examples: [MN-88421] }
+        specialtyId: { type: integer, minimum: 1, examples: [1] }
+      examples:
+        - { specialtyId: 1 }
