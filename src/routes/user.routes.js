@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as controller from "../controllers/user.controller.js";
 import { validateBody } from "../middlewares/validate-body.middleware.js";
-import { validateUserId } from "../middlewares/validate-id.middleware.js";
+import { validateId } from "../middlewares/validate-id.middleware.js";
 import { requireRole } from "../middlewares/require-role.middleware.js";
 import {
   assignRoleDto,
@@ -14,11 +14,11 @@ export const userRouter = Router();
 // /search va ANTES de /:id, o Express lo interpreta como un id
 userRouter.get("/search", controller.search);
 userRouter.get("/", controller.list);
-userRouter.get("/:id", validateUserId, controller.getById);
+userRouter.get("/:id", validateId("User"), controller.getById);
 userRouter.post("/", validateBody(createUserDto), controller.create);
 userRouter.patch(
   "/:id",
-  validateUserId,
+  validateId("User"),
   validateBody(updateUserDto),
   controller.update,
 );
@@ -26,8 +26,8 @@ userRouter.patch(
 userRouter.patch(
   "/:id/role",
   requireRole("ROLE_ADMIN"),
-  validateUserId,
+  validateId("User"),
   validateBody(assignRoleDto),
   controller.assignRole,
 );
-userRouter.delete("/:id", validateUserId, controller.remove);
+userRouter.delete("/:id", validateId("User"), controller.remove);
