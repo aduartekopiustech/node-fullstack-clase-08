@@ -1,0 +1,387 @@
+openapi: 3.2.1
+info:
+  title: Hospital API
+  summary: Patients, doctors, nurses, appointments and specialties
+  description: REST API for the Node.js course. The users resource comes from Class 7.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local
+security: []
+tags:
+  - name: Health
+    description: Service status
+  - name: Users
+    description: Class 7 users
+  - name: Patients
+    description: Patients
+  - name: Doctors
+    description: Doctors and their specialty
+  - name: Nurses
+    description: Nurses
+  - name: Appointments
+    description: Appointments between patients and doctors
+  - name: Specialties
+    description: Read-only specialty catalog
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: API is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    examples: [ok]
+              examples:
+                ok:
+                  value:
+                    status: ok
+
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List users
+      operationId: listUsers
+      responses:
+        "200":
+          description: User collection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+              examples:
+                users:
+                  value:
+                    data:
+                      - id: 1
+                        name: Ada Lovelace
+                        email: ada@example.com
+                        role: ROLE_USER
+    post:
+      tags: [Users]
+      summary: Create user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+            examples:
+              ada:
+                value:
+                  name: Ada Lovelace
+                  email: ada@example.com
+                  password: password123
+      responses:
+        "201":
+          description: User created
+          headers:
+            Location:
+              description: URL of the created user
+              schema:
+                type: string
+                examples: [/api/users/1]
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+              examples:
+                created:
+                  value:
+                    data:
+                      id: 1
+                      name: Ada Lovelace
+                      email: ada@example.com
+                      role: ROLE_USER
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/DuplicateConflict"
+
+  /api/users/search:
+    get:
+      tags: [Users]
+      summary: Search users by name or email
+      operationId: searchUsers
+      parameters:
+        - name: keywords
+          in: query
+          required: false
+          description: Case-insensitive name or email fragment
+          schema:
+            type: string
+            examples: [ada]
+      responses:
+        "200":
+          description: Matching users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+              examples:
+                matches:
+                  value:
+                    data:
+                      - id: 1
+                        name: Ada Lovelace
+                        email: ada@example.com
+                        role: ROLE_USER
+
+  /api/users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Users]
+      summary: Get user by id
+      operationId: getUserById
+      responses:
+        "200":
+          description: User detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+              examples:
+                user:
+                  value:
+                    data:
+                      id: 1
+                      name: Ada Lovelace
+                      email: ada@example.com
+                      role: ROLE_USER
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Users]
+      summary: Update user
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+            examples:
+              rename:
+                value:
+                  name: Ada King
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+              examples:
+                updated:
+                  value:
+                    data:
+                      id: 1
+                      name: Ada King
+                      email: ada@example.com
+                      role: ROLE_USER
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/DuplicateConflict"
+    delete:
+      tags: [Users]
+      summary: Delete user
+      operationId: deleteUser
+      responses:
+        "204":
+          description: User deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Positive integer resource id
+      schema:
+        type: integer
+        minimum: 1
+        examples: [1]
+
+  responses:
+    ValidationError:
+      description: Invalid request, id or query parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            invalid:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: Invalid request body
+                  details: [name is required]
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              value:
+                error:
+                  code: USER_NOT_FOUND
+                  message: User not found
+    DuplicateConflict:
+      description: A unique value is already registered
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            duplicate:
+              value:
+                error:
+                  code: EMAIL_TAKEN
+                  message: Email is already registered
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              examples: [VALIDATION_ERROR]
+            message:
+              type: string
+              examples: [Invalid request body]
+            details:
+              type: array
+              items:
+                type: string
+              examples: [[name is required]]
+      examples:
+        - error:
+            code: VALIDATION_ERROR
+            message: Invalid request body
+            details: [name is required]
+
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          type: integer
+          examples: [1]
+        name:
+          type: string
+          examples: [Ada Lovelace]
+        email:
+          type: string
+          format: email
+          examples: [ada@example.com]
+        role:
+          type: string
+          enum: [ROLE_USER, ROLE_ADMIN]
+          examples: [ROLE_USER]
+      examples:
+        - id: 1
+          name: Ada Lovelace
+          email: ada@example.com
+          role: ROLE_USER
+
+    UserInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+          examples: [Ada Lovelace]
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          examples: [ada@example.com]
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+          examples: [password123]
+      examples:
+        - name: Ada Lovelace
+          email: ada@example.com
+          password: password123
+
+    UserUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+          examples: [Ada King]
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          examples: [ada.king@example.com]
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+          examples: [newpassword123]
+      examples:
+        - name: Ada King
