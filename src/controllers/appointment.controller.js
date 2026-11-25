@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import { Appointment, Doctor, Patient } from "../models/index.js";
 import { toAppointmentResponse } from "../dtos/appointment.dto.js";
 import { AppError } from "../errors/app-error.js";
@@ -24,6 +25,51 @@ const appointmentNotFound = () =>
 export const list = async (req, res) => {
   const appointments = await Appointment.findAll({
     include: parties,
+    order: [["scheduledAt", "ASC"]],
+  });
+
+  res.json({ data: appointments.map(toAppointmentResponse) });
+};
+
+export const search = async (req, res) => {
+  const { doctorId, date, documentNumber, patientName } = req.queryDto;
+  const where = {};
+
+  if (doctorId) {
+    where.doctorId = doctorId;
+  }
+
+  if (date) {
+    const start = new Date(`${date}T00:00:00.000Z`);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    where.scheduledAt = { [Op.gte]: start, [Op.lt]: end };
+  }
+
+  const hasPatientFilter = Boolean(documentNumber || patientName);
+  const patientWhere = {};
+
+  if (documentNumber) {
+    patientWhere.documentNumber = documentNumber;
+  }
+
+  if (patientName) {
+    const pattern = `%${patientName}%`;
+    patientWhere[Op.or] = [
+      { firstName: { [Op.iLike]: pattern } },
+      { lastName: { [Op.iLike]: pattern } },
+    ];
+  }
+
+  const appointments = await Appointment.findAll({
+    where,
+    include: [
+      {
+        ...parties[0],
+        required: hasPatientFilter,
+        ...(hasPatientFilter ? { where: patientWhere } : {}),
+      },
+      parties[1],
+    ],
     order: [["scheduledAt", "ASC"]],
   });
 

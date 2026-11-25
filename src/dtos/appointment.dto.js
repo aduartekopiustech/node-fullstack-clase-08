@@ -37,6 +37,30 @@ export const updateAppointmentDto = yup
     (value) => Object.keys(value ?? {}).length > 0,
   );
 
+const queryDate = yup
+  .string()
+  .matches(/^\d{4}-\d{2}-\d{2}$/, "date must use YYYY-MM-DD")
+  .test("valid-date", "date must be a valid date", (value) => {
+    if (!value) return true;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return (
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === value
+    );
+  });
+
+export const searchAppointmentsQueryDto = yup
+  .object({
+    doctorId,
+    date: queryDate,
+    documentNumber: yup
+      .string()
+      .trim()
+      .matches(/^[0-9]{7,10}$/, "Document number must contain 7 to 10 digits"),
+    patientName: yup.string().trim().min(1),
+  })
+  .noUnknown(true, "Unknown query parameters are not allowed");
+
 const toPartyResponse = (party) => ({
   id: party.id,
   firstName: party.firstName,
