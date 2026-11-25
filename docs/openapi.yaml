@@ -623,6 +623,172 @@ paths:
         "409":
           $ref: "#/components/responses/DoctorHasAppointments"
 
+  /api/nurses:
+    get:
+      tags: [Nurses]
+      summary: List nurses
+      operationId: listNurses
+      responses:
+        "200":
+          description: Nurse collection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Nurse"
+              examples:
+                nurses:
+                  value:
+                    data:
+                      - { id: 1, firstName: Nina, lastName: Foster, licenseNumber: RN-55421 }
+    post:
+      tags: [Nurses]
+      summary: Create nurse
+      operationId: createNurse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NurseInput"
+            examples:
+              nina:
+                value: { firstName: Nina, lastName: Foster, licenseNumber: RN-55421 }
+      responses:
+        "201":
+          description: Nurse created
+          headers:
+            Location:
+              description: URL of the created nurse
+              schema:
+                type: string
+                examples: [/api/nurses/1]
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Nurse"
+              examples:
+                created:
+                  value:
+                    data: { id: 1, firstName: Nina, lastName: Foster, licenseNumber: RN-55421 }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/LicenseNumberConflict"
+
+  /api/nurses/search:
+    get:
+      tags: [Nurses]
+      summary: Search nurses by first or last name
+      operationId: searchNurses
+      parameters:
+        - name: keywords
+          in: query
+          required: false
+          description: Case-insensitive first or last name fragment
+          schema:
+            type: string
+            examples: [foster]
+      responses:
+        "200":
+          description: Matching nurses
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Nurse"
+              examples:
+                matches:
+                  value:
+                    data:
+                      - { id: 1, firstName: Nina, lastName: Foster, licenseNumber: RN-55421 }
+
+  /api/nurses/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Nurses]
+      summary: Get nurse by id
+      operationId: getNurseById
+      responses:
+        "200":
+          description: Nurse detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Nurse"
+              examples:
+                nurse:
+                  value:
+                    data: { id: 1, firstName: Nina, lastName: Foster, licenseNumber: RN-55421 }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NurseNotFound"
+    patch:
+      tags: [Nurses]
+      summary: Update nurse
+      operationId: updateNurse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NurseUpdate"
+            examples:
+              rename:
+                value: { firstName: Nina, lastName: Smith }
+      responses:
+        "200":
+          description: Nurse updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Nurse"
+              examples:
+                updated:
+                  value:
+                    data: { id: 1, firstName: Nina, lastName: Smith, licenseNumber: RN-55421 }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NurseNotFound"
+        "409":
+          $ref: "#/components/responses/LicenseNumberConflict"
+    delete:
+      tags: [Nurses]
+      summary: Delete nurse
+      operationId: deleteNurse
+      responses:
+        "204":
+          description: Nurse deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NurseNotFound"
+
 components:
   parameters:
     Id:
@@ -740,6 +906,16 @@ components:
           examples:
             inUse:
               value: { error: { code: DOCTOR_HAS_APPOINTMENTS, message: Doctor has appointments and cannot be deleted } }
+
+    NurseNotFound:
+      description: Nurse not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missing:
+              value: { error: { code: NURSE_NOT_FOUND, message: Nurse not found } }
 
   schemas:
     Error:
@@ -918,3 +1094,34 @@ components:
         specialtyId: { type: integer, minimum: 1, examples: [1] }
       examples:
         - { specialtyId: 1 }
+
+    Nurse:
+      type: object
+      required: [id, firstName, lastName, licenseNumber]
+      properties:
+        id: { type: integer, examples: [1] }
+        firstName: { type: string, examples: [Nina] }
+        lastName: { type: string, examples: [Foster] }
+        licenseNumber: { type: string, examples: [RN-55421] }
+      examples:
+        - { id: 1, firstName: Nina, lastName: Foster, licenseNumber: RN-55421 }
+
+    NurseInput:
+      type: object
+      required: [firstName, lastName, licenseNumber]
+      properties:
+        firstName: { type: string, minLength: 2, maxLength: 120, examples: [Nina] }
+        lastName: { type: string, minLength: 2, maxLength: 120, examples: [Foster] }
+        licenseNumber: { type: string, minLength: 4, maxLength: 20, examples: [RN-55421] }
+      examples:
+        - { firstName: Nina, lastName: Foster, licenseNumber: RN-55421 }
+
+    NurseUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        firstName: { type: string, minLength: 2, maxLength: 120, examples: [Nina] }
+        lastName: { type: string, minLength: 2, maxLength: 120, examples: [Smith] }
+        licenseNumber: { type: string, minLength: 4, maxLength: 20, examples: [RN-55421] }
+      examples:
+        - { firstName: Nina, lastName: Smith }
