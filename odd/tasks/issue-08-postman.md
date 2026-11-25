@@ -8,8 +8,9 @@ La API y Swagger ya están implementados. Se necesita una colección Postman v2.
 
 - [x] Slice 1 — `docs/issue-08-postman-foundation`: environment, Health y Users.
 - [x] Slice 2 — `docs/issue-08-postman-patients`: Patients y Specialties.
-- [ ] Slice 3 — `docs/issue-08-postman-staff`: Doctors y Nurses.
-- [ ] Slice 4 — `docs/issue-08-postman-appointments`: Appointments, filtros, cancelación, conflictos y limpieza final.
+- [x] Slice 3 — `docs/issue-08-postman-doctors`: Doctors.
+- [ ] Slice 4 — `docs/issue-08-postman-nurses`: Nurses.
+- [ ] Slice 5 — `docs/issue-08-postman-appointments`: Appointments, filtros, cancelación, conflictos y limpieza final.
 
 ## Criterios de aceptación
 
@@ -40,5 +41,6 @@ Cada slice agrega carpetas a la misma colección y abre un PR parcial hacia `mai
 
 - Slice 1: JSON válido, 9 requests y environment Local; Newman ejecutó 9 requests y 9 assertions sin fallos, con borrado del usuario temporal.
 - Slice 2: 21 requests acumulados; Newman ejecutó 21 assertions sin fallos. Patients usa documento dinámico e id capturado; Specialties valida catálogo, detalle y errores.
-- Slice 3: pendiente.
+- Slice 3: 30 requests acumulados; Newman ejecutó 30 assertions sin fallos. Doctors valida especialidad anidada, LICENSE_NUMBER_TAKEN e INVALID_REFERENCE.
 - Slice 4: pendiente.
+- Slice 5: pendiente.

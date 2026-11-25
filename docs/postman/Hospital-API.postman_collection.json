@@ -618,6 +618,258 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Doctors",
+      "item": [
+        {
+          "name": "Create doctor",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('doctorLicense', `MN-${Date.now()}`);"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created with nested specialty', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const { data } = pm.response.json();",
+                  "  pm.expect(pm.response.headers.get('Location')).to.equal(`/api/doctors/${data.id}`);",
+                  "  pm.expect(data.specialty).to.have.keys(['id', 'name']);",
+                  "  pm.expect(data).not.to.have.property('specialtyId');",
+                  "  pm.collectionVariables.set('doctorId', data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Doctor\",\n  \"licenseNumber\": \"{{doctorLicense}}\",\n  \"specialtyId\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/doctors", "host": ["{{baseUrl}}"], "path": ["api", "doctors"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get doctor by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with doctor and specialty', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const { data } = pm.response.json();",
+                  "  pm.expect(data.id).to.equal(pm.collectionVariables.get('doctorId'));",
+                  "  pm.expect(data.specialty.id).to.equal(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/doctors/{{doctorId}}", "host": ["{{baseUrl}}"], "path": ["api", "doctors", "{{doctorId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with updated name and specialty', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const { data } = pm.response.json();",
+                  "  pm.expect(data.lastName).to.equal('Updated');",
+                  "  pm.expect(data.specialty.id).to.equal(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"lastName\": \"Updated\",\n  \"specialtyId\": 2\n}" },
+            "url": { "raw": "{{baseUrl}}/api/doctors/{{doctorId}}", "host": ["{{baseUrl}}"], "path": ["api", "doctors", "{{doctorId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Search doctors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with created doctor in search', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const doctors = pm.response.json().data;",
+                  "  pm.expect(doctors.some((doctor) => doctor.id === pm.collectionVariables.get('doctorId'))).to.equal(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/doctors/search?keywords=updated",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "doctors", "search"],
+              "query": [{ "key": "keywords", "value": "updated" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject duplicate doctor license",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 LICENSE_NUMBER_TAKEN', () => {",
+                  "  pm.response.to.have.status(409);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('LICENSE_NUMBER_TAKEN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Doctor\",\n  \"licenseNumber\": \"{{doctorLicense}}\",\n  \"specialtyId\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/doctors", "host": ["{{baseUrl}}"], "path": ["api", "doctors"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject invalid specialty reference",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('invalidDoctorLicense', `MN-X${Date.now()}`);"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 INVALID_REFERENCE', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('INVALID_REFERENCE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Doctor\",\n  \"licenseNumber\": \"{{invalidDoctorLicense}}\",\n  \"specialtyId\": 999999\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/doctors", "host": ["{{baseUrl}}"], "path": ["api", "doctors"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject invalid doctor id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 INVALID_ID', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('INVALID_ID');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/doctors/abc", "host": ["{{baseUrl}}"], "path": ["api", "doctors", "abc"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Return missing doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 DOCTOR_NOT_FOUND', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('DOCTOR_NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/doctors/999999", "host": ["{{baseUrl}}"], "path": ["api", "doctors", "999999"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/doctors/{{doctorId}}", "host": ["{{baseUrl}}"], "path": ["api", "doctors", "{{doctorId}}"] }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -639,6 +891,18 @@
     },
     {
       "key": "patientId",
+      "value": ""
+    },
+    {
+      "key": "doctorLicense",
+      "value": ""
+    },
+    {
+      "key": "doctorId",
+      "value": ""
+    },
+    {
+      "key": "invalidDoctorLicense",
       "value": ""
     }
   ]
