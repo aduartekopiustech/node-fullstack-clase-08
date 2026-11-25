@@ -1,5 +1,31 @@
 import { UniqueConstraintError, ValidationError } from "sequelize";
 
+const UNIQUE_ERRORS = {
+  email: {
+    code: "EMAIL_TAKEN",
+    message: "Email is already registered",
+  },
+  document_number: {
+    code: "DOCUMENT_NUMBER_TAKEN",
+    message: "Document number is already registered",
+  },
+  license_number: {
+    code: "LICENSE_NUMBER_TAKEN",
+    message: "License number is already registered",
+  },
+  name: {
+    code: "SPECIALTY_NAME_TAKEN",
+    message: "Specialty name is already registered",
+  },
+};
+
+const CONSTRAINT_ERRORS = {
+  appointments_doctor_slot_unique: {
+    code: "DOCTOR_SLOT_TAKEN",
+    message: "Doctor already has an appointment at that time",
+  },
+};
+
 export const errorHandler = (error, req, res, next) => {
   if (res.headersSent) {
     return next(error);
@@ -15,12 +41,16 @@ export const errorHandler = (error, req, res, next) => {
     });
   }
 
-  // La base rechazó un UNIQUE (email repetido)
+  // La constraint y la columna identifican qué valor está duplicado.
   if (error instanceof UniqueConstraintError) {
+    const constraint = error.parent?.constraint;
+    const field = Object.keys(error.fields ?? {})[0];
+    const conflict = CONSTRAINT_ERRORS[constraint] ?? UNIQUE_ERRORS[field];
+
     return res.status(409).json({
       error: {
-        code: "EMAIL_TAKEN",
-        message: "Email is already registered",
+        code: conflict?.code ?? "DUPLICATE_VALUE",
+        message: conflict?.message ?? "Value is already registered",
       },
     });
   }

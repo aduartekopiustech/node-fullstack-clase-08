@@ -38,7 +38,7 @@ export const search = async (req, res) => {
 };
 
 export const getById = async (req, res) => {
-  const user = await User.findByPk(req.userId);
+  const user = await User.findByPk(req.resourceId);
 
   if (!user) {
     throw userNotFound();
@@ -63,7 +63,7 @@ export const create = async (req, res) => {
 };
 
 export const update = async (req, res) => {
-  const user = await User.findByPk(req.userId);
+  const user = await User.findByPk(req.resourceId);
 
   if (!user) {
     throw userNotFound();
@@ -81,7 +81,7 @@ export const update = async (req, res) => {
 };
 
 export const assignRole = async (req, res) => {
-  const user = await User.findByPk(req.userId);
+  const user = await User.findByPk(req.resourceId);
 
   if (!user) {
     throw userNotFound();
@@ -93,7 +93,7 @@ export const assignRole = async (req, res) => {
 };
 
 export const remove = async (req, res) => {
-  const user = await User.findByPk(req.userId);
+  const user = await User.findByPk(req.resourceId);
 
   if (!user) {
     throw userNotFound();
