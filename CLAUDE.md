@@ -43,6 +43,10 @@ Classic layered flow, one file per resource per layer: **Route â†’ Middleware â†
 - Appointments: cancel is `PATCH { status: "CANCELLED" }` (server sets `cancelledAt`), not `DELETE`. Date search uses a day range on `scheduled_at` (TIMESTAMPTZ), never equality. Query params are strings and must pass a query DTO before reaching `where`.
 - `sync({ alter: true })` can drop columns; it is dev-only (migrations come later in the course).
 
+## Issue completion
+
+When an issue is moved to `Done`, document its completion in the GitHub issue and in Engram before reporting it closed. Include the implemented behavior, changed files, verification commands and observed results, branch/commit/PR links, and any skipped or pending checks. Do not mark an issue `Done` while acceptance criteria remain unverified.
+
 ## Language
 
 Code, identifiers, and API error codes/messages are in English. Code comments and the README/backlog are in Spanish; keep that when extending them.
