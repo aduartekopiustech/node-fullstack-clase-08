@@ -870,6 +870,249 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Nurses",
+      "item": [
+        {
+          "name": "Create nurse",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('nurseLicense', `RN-${Date.now()}`);"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created without specialty', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const { data } = pm.response.json();",
+                  "  pm.expect(pm.response.headers.get('Location')).to.equal(`/api/nurses/${data.id}`);",
+                  "  pm.expect(data).to.have.keys(['id', 'firstName', 'lastName', 'licenseNumber']);",
+                  "  pm.expect(data).not.to.have.property('specialty');",
+                  "  pm.collectionVariables.set('nurseId', data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Nurse\",\n  \"licenseNumber\": \"{{nurseLicense}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/nurses", "host": ["{{baseUrl}}"], "path": ["api", "nurses"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get nurse by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with captured nurse id', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.id).to.equal(pm.collectionVariables.get('nurseId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/nurses/{{nurseId}}", "host": ["{{baseUrl}}"], "path": ["api", "nurses", "{{nurseId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update nurse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with updated last name', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.lastName).to.equal('Updated');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"lastName\": \"Updated\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/nurses/{{nurseId}}", "host": ["{{baseUrl}}"], "path": ["api", "nurses", "{{nurseId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Search nurses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK with created nurse in search', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const nurses = pm.response.json().data;",
+                  "  pm.expect(nurses.some((nurse) => nurse.id === pm.collectionVariables.get('nurseId'))).to.equal(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/nurses/search?keywords=updated",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "nurses", "search"],
+              "query": [{ "key": "keywords", "value": "updated" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject duplicate nurse license",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 LICENSE_NUMBER_TAKEN', () => {",
+                  "  pm.response.to.have.status(409);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('LICENSE_NUMBER_TAKEN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Nurse\",\n  \"licenseNumber\": \"{{nurseLicense}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/nurses", "host": ["{{baseUrl}}"], "path": ["api", "nurses"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject specialty field for nurse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 VALIDATION_ERROR with details', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  const { error } = pm.response.json();",
+                  "  pm.expect(error.code).to.equal('VALIDATION_ERROR');",
+                  "  pm.expect(error.details).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Nurse\",\n  \"licenseNumber\": \"{{nurseLicense}}\",\n  \"specialtyId\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/nurses", "host": ["{{baseUrl}}"], "path": ["api", "nurses"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject invalid nurse id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 INVALID_ID', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('INVALID_ID');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/nurses/abc", "host": ["{{baseUrl}}"], "path": ["api", "nurses", "abc"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Return missing nurse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 NURSE_NOT_FOUND', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.json().error.code).to.equal('NURSE_NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/nurses/999999", "host": ["{{baseUrl}}"], "path": ["api", "nurses", "999999"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete nurse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/nurses/{{nurseId}}", "host": ["{{baseUrl}}"], "path": ["api", "nurses", "{{nurseId}}"] }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -903,6 +1146,14 @@
     },
     {
       "key": "invalidDoctorLicense",
+      "value": ""
+    },
+    {
+      "key": "nurseLicense",
+      "value": ""
+    },
+    {
+      "key": "nurseId",
       "value": ""
     }
   ]
