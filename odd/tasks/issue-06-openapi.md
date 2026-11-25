@@ -9,7 +9,7 @@ Conteo normativo del README: health 1 + users 6 + patients 6 + doctors 6 + nurse
 ## Tareas
 
 - [x] Slice 1 — `docs/issue-06-openapi-foundation`: documento base, tags, componentes comunes, health y users (7 operaciones). Incluye la regla pendiente de `CLAUDE.md` como commit separado.
-- [ ] Slice 2 — `docs/issue-06-openapi-patients`: patients y specialties (8 operaciones), con acumulado de 15.
+- [x] Slice 2 — `docs/issue-06-openapi-patients`: patients y specialties (8 operaciones), con acumulado de 15.
 - [ ] Slice 3 — `docs/issue-06-openapi-staff`: doctors y nurses (12 operaciones), con acumulado de 27.
 - [ ] Slice 4 — `docs/issue-06-openapi-appointments`: appointments (6 operaciones), con total final de 33.
 
@@ -41,6 +41,6 @@ Cada slice tiene rama, commit y PR propios hacia `main`, vinculados al issue #6.
 ## Evidencia
 
 - Slice 1: 7 operaciones y 7 `operationId` únicos verificados; Redocly válido sin errores, con 5 warnings de estilo. Commit de OpenAPI pendiente de PR.
-- Slice 2: pendiente.
+- Slice 2: 15 operaciones y 15 `operationId` únicos verificados; Redocly válido sin errores, con 8 warnings de estilo. Diff: 300 líneas de contrato.
 - Slice 3: pendiente.
 - Slice 4: pendiente.
