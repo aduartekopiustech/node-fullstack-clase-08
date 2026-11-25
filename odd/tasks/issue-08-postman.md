@@ -11,7 +11,7 @@ La API y Swagger ya están implementados. Se necesita una colección Postman v2.
 - [x] Slice 3 — `docs/issue-08-postman-doctors`: Doctors.
 - [x] Slice 4 — `docs/issue-08-postman-nurses`: Nurses.
 - [x] Slice 5 — `docs/issue-08-postman-appointments-core`: setup, CRUD y errores básicos de Appointments.
-- [ ] Slice 6 — `docs/issue-08-postman-appointments-search`: cuatro filtros por separado y combinados.
+- [x] Slice 6 — `docs/issue-08-postman-appointments-search`: cuatro filtros por separado y combinados.
 - [ ] Slice 7 — `docs/issue-08-postman-appointments-cancellation`: cancelación, conflictos y limpieza final.
 
 ## Criterios de aceptación
@@ -46,5 +46,5 @@ Cada slice agrega carpetas a la misma colección y abre un PR parcial hacia `mai
 - Slice 3: 30 requests acumulados; Newman ejecutó 30 assertions sin fallos. Doctors valida especialidad anidada, LICENSE_NUMBER_TAKEN e INVALID_REFERENCE.
 - Slice 4: 39 requests acumulados; Newman ejecutó 39 assertions sin fallos. Nurses no requiere especialidad y rechaza specialtyId, además de validar matrícula duplicada y errores.
 - Slice 5: 49 requests acumulados; Newman ejecutó 49 assertions sin fallos. Setup dinámico, salida anidada, DOCTOR_SLOT_TAKEN, INVALID_REFERENCE e ids validados. Limpieza intermedia directa completada.
-- Slice 6: pendiente.
+- Slice 6: Newman ejecutó 57 requests y 57 assertions sin fallos. El segundo turno permite verificar el orden y la exclusión del día siguiente. Se eliminaron los dos turnos, el médico y el paciente temporales por los IDs creados en la corrida.
 - Slice 7: pendiente.

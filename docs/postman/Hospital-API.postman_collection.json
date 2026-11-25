@@ -1396,6 +1396,136 @@
             "url": { "raw": "{{baseUrl}}/api/appointments/999999", "host": ["{{baseUrl}}"], "path": ["api", "appointments", "999999"] }
           },
           "response": []
+        },
+        {
+          "name": "Create next-day appointment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/appointments",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": {{appointmentPatientId}},\n  \"doctorId\": {{appointmentDoctorId}},\n  \"scheduledAt\": \"2027-03-16T09:00:00.000Z\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('Next-day appointment belongs to the same doctor and patient', () => {",
+              "  pm.response.to.have.status(201);",
+              "  const { data } = pm.response.json();",
+              "  pm.expect(data.doctor.id).to.equal(pm.collectionVariables.get('appointmentDoctorId'));",
+              "  pm.expect(data.patient.id).to.equal(pm.collectionVariables.get('appointmentPatientId'));",
+              "  pm.collectionVariables.set('secondAppointmentId', data.id);",
+              "});"
+            ] }
+          }]
+        },
+        {
+          "name": "Search all appointments in chronological order",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/appointments/search" },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('Both appointments appear in an ascending agenda', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const { data } = pm.response.json();",
+              "  const times = data.map(a => Date.parse(a.scheduledAt));",
+              "  pm.expect(times).to.deep.equal([...times].sort((a, b) => a - b));",
+              "  pm.expect(data.map(a => a.id)).to.include.members([pm.collectionVariables.get('appointmentId'), pm.collectionVariables.get('secondAppointmentId')]);",
+              "});"
+            ] }
+          }]
+        },
+        {
+          "name": "Search appointments by doctor",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/appointments/search?doctorId={{appointmentDoctorId}}" },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('Only appointments for the captured doctor are returned', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const { data } = pm.response.json();",
+              "  pm.expect(data.map(a => a.id)).to.have.members([pm.collectionVariables.get('appointmentId'), pm.collectionVariables.get('secondAppointmentId')]);",
+              "  pm.expect(data.every(a => a.doctor.id === pm.collectionVariables.get('appointmentDoctorId'))).to.equal(true);",
+              "});"
+            ] }
+          }]
+        },
+        {
+          "name": "Search appointments by UTC day",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/appointments/search?date=2027-03-15" },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('The 14:30 slot is included and the next day is excluded', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const { data } = pm.response.json();",
+              "  const ids = data.map(a => a.id);",
+              "  pm.expect(ids).to.include(pm.collectionVariables.get('appointmentId'));",
+              "  pm.expect(ids).not.to.include(pm.collectionVariables.get('secondAppointmentId'));",
+              "  pm.expect(data.every(a => a.scheduledAt.startsWith('2027-03-15'))).to.equal(true);",
+              "});"
+            ] }
+          }]
+        },
+        {
+          "name": "Search appointments by patient document",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/appointments/search?documentNumber={{appointmentPatientDocument}}" },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('The exact document selects both appointments for its patient', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const { data } = pm.response.json();",
+              "  pm.expect(data.map(a => a.id)).to.have.members([pm.collectionVariables.get('appointmentId'), pm.collectionVariables.get('secondAppointmentId')]);",
+              "  pm.expect(data.every(a => a.patient.id === pm.collectionVariables.get('appointmentPatientId'))).to.equal(true);",
+              "});"
+            ] }
+          }]
+        },
+        {
+          "name": "Search appointments by patient name fragment",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/appointments/search?patientName=pOiNtMeNt" },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('Patient name matches a mixed-case substring', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const { data } = pm.response.json();",
+              "  pm.expect(data.map(a => a.id)).to.include.members([pm.collectionVariables.get('appointmentId'), pm.collectionVariables.get('secondAppointmentId')]);",
+              "  pm.expect(data.every(({ patient }) => [patient.firstName, patient.lastName].some(name => name.toLowerCase().includes('pointment')))).to.equal(true);",
+              "});"
+            ] }
+          }]
+        },
+        {
+          "name": "Search appointments using all four filters",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/appointments/search?doctorId={{appointmentDoctorId}}&date=2027-03-15&documentNumber={{appointmentPatientDocument}}&patientName=POSTMAN" },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('Only the first appointment matches every filter', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().data.map(a => a.id)).to.deep.equal([pm.collectionVariables.get('appointmentId')]);",
+              "});"
+            ] }
+          }]
+        },
+        {
+          "name": "Reject nonnumeric doctor query",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/appointments/search?doctorId=abc" },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "pm.test('400 VALIDATION_ERROR with query details', () => {",
+              "  pm.response.to.have.status(400);",
+              "  const { error } = pm.response.json();",
+              "  pm.expect(error.code).to.equal('VALIDATION_ERROR');",
+              "  pm.expect(error.details).to.be.an('array').that.is.not.empty;",
+              "});"
+            ] }
+          }]
         }
       ]
     }
@@ -1459,6 +1589,10 @@
     },
     {
       "key": "appointmentId",
+      "value": ""
+    },
+    {
+      "key": "secondAppointmentId",
       "value": ""
     }
   ]
