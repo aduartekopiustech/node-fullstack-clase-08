@@ -20,6 +20,9 @@
 
 ---
 
+> [!TIP]
+> **Guía operativa del proyecto:** para ejecutar el proyecto paso a paso, abrir la documentación interactiva en **Swagger UI**, correr las pruebas automatizadas en **Postman / Newman** y ejecutar la suite **`npm test`**, consulta la [Guía de ejecución, Swagger UI, Postman y tests](docs/guia-ejecucion.md).
+
 ## CONTENIDO
 
 1. [Resumen y siguientes pasos](#1-resumen-y-siguientes-pasos)
@@ -53,6 +56,7 @@
    - [Por qué /docs y /openapi.yaml](#73-por-qué-docs-y-openapiyaml)
 8. [Arquitectura](#8-arquitectura)
 9. [Tarea 014: MVP hospitalario documentado y probado](#9-tarea-014-mvp-hospitalario-documentado-y-probado)
+   - [Guía de ejecución, Swagger UI, Postman y tests automatizados](docs/guia-ejecucion.md)
    - [Backlog de issues](docs/backlog.md)
    - [Objetivo](#91-objetivo)
    - [Entregables](#92-entregables)
