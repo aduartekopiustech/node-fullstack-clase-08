@@ -109,3 +109,14 @@ export async function createNurse(overrides = {}) {
   assert.equal(res.status, 201);
   return res.body.data;
 }
+
+export async function createAppointment(overrides = {}) {
+  const res = await request.post("/api/appointments").send({
+    durationMinutes: 30,
+    reason: "Control clínico",
+    ...overrides,
+  });
+
+  assert.equal(res.status, 201);
+  return res.body.data;
+}
